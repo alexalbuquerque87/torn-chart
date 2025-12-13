@@ -190,7 +190,7 @@ function CandleChart({ data }: ChartProps) {
     chartRef.current = chart
     seriesRef.current = series
 
-    const bbBandOptions: LineSeriesOptions = {
+    const bbBandOptions: Partial<LineSeriesOptions> = {
       color: '#ffffff',
       lineWidth: 1,
       priceLineVisible: false,
@@ -203,28 +203,28 @@ function CandleChart({ data }: ChartProps) {
     bbUpperRef.current = upperSeries
     bbLowerRef.current = lowerSeries
 
-    const ema9Options: LineSeriesOptions = {
+    const ema9Options: Partial<LineSeriesOptions> = {
       color: '#22c55e', // verde
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
     }
 
-    const ema20Options: LineSeriesOptions = {
+    const ema20Options: Partial<LineSeriesOptions> = {
       color: '#a855f7', // lilás
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
     }
 
-    const ema50Options: LineSeriesOptions = {
+    const ema50Options: Partial<LineSeriesOptions> = {
       color: '#facc15', // amarela
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
     }
 
-    const ema200Options: LineSeriesOptions = {
+    const ema200Options: Partial<LineSeriesOptions> = {
       color: '#38bdf8', // azul claro
       lineWidth: 2,
       priceLineVisible: false,
@@ -407,15 +407,11 @@ function App() {
   const [inputTicker, setInputTicker] = useState('fhg')
   const [interval] = useState<Interval>('d1')
   const [data, setData] = useState<Candle[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
     async function load() {
-      setLoading(true)
-      setError(null)
       try {
         const candles = await fetchOhlc(ticker, interval)
         if (!cancelled) {
@@ -425,11 +421,7 @@ function App() {
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Erro desconhecido')
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
+          console.error('Erro ao carregar dados:', e instanceof Error ? e.message : 'Erro desconhecido')
         }
       }
     }
