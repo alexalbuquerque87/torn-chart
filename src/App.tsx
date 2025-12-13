@@ -587,6 +587,25 @@ function App() {
         <header className="app-header">
           <div className="header-left">
             <h1>Torn Chart</h1>
+            <div className="mobile-controls">
+              <select
+                value={ticker}
+                onChange={(e) => handleSelectFromList(e.target.value)}
+                className="mobile-dropdown"
+              >
+                {watchlist.map((symbol) => (
+                  <option key={symbol} value={symbol.toLowerCase()}>
+                    {symbol}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn-previous" onClick={handlePrevious}>
+                Previous
+              </button>
+              <button type="button" className="btn-next" onClick={handleNext}>
+                Next
+              </button>
+            </div>
             <div className="interval-group">
               <button
                 type="button"
@@ -618,7 +637,7 @@ function App() {
               </button>
             </div>
           </div>
-          <form onSubmit={handleSubmit} className="controls">
+          <form onSubmit={handleSubmit} className="controls desktop-only">
             <label>
               Ticker
             </label>

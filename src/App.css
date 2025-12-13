@@ -260,3 +260,50 @@ body {
   background: #1d4ed8;
   color: #ffffff;
 }
+
+.mobile-controls {
+  display: none;
+}
+
+.mobile-dropdown {
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid #1f2937;
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 0.9rem;
+  cursor: pointer;
+  min-width: 120px;
+}
+
+@media (max-width: 980px) {
+  .app-root {
+    flex-direction: column;
+  }
+
+  .watchlist {
+    display: none;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.5rem;
+  }
+
+  .header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
