@@ -258,9 +258,6 @@ function CandleChart({ data }: ChartProps) {
     // Adicionar série de volume
     const volumeOptions: Partial<HistogramSeriesOptions> = {
       color: '#26a69a',
-      priceFormat: {
-        type: 'volume',
-      },
       priceScaleId: 'volume',
     }
     const volumeSeries = chart.addSeries(HistogramSeries, volumeOptions)
