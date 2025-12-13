@@ -1,73 +1,71 @@
-# React + TypeScript + Vite
+# Torn TV Chart
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A professional candlestick chart application for visualizing stock market data from the Torn game. Built with modern web technologies for real-time financial analysis and technical indicators.
 
-Currently, two official plugins are available:
+![Screenshot](printscreen.png)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Features
 
-## React Compiler
+- **Interactive Candlestick Charts** - Price visualization with OHLC (Open, High, Low, Close) data
+- **Volume Analysis** - Dedicated volume histogram with color-coded bars
+- **Technical Indicators**
+  - Exponential Moving Averages (EMA 9, 20, 50, 200)
+  - Bollinger Bands
+- **Multiple Time Intervals** - 1H, 12H, Daily (D), and Weekly (W) charts
+- **Symbol Watchlist** - Quick navigation between 30+ stock symbols
+- **Interactive Legend** - Click to toggle indicators on/off
+- **Responsive Design** - Optimized for various screen sizes
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Technologies Used
 
-## Expanding the ESLint configuration
+- **React 19** - Modern UI library with hooks
+- **TypeScript** - Type-safe development
+- **Vite** - Lightning-fast build tool and dev server
+- **Lightweight Charts** - Professional-grade charting library by TradingView
+- **CSS3** - Custom styling with dark theme
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Getting Started
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Prerequisites
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- Node.js 18+ and npm
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Installation
+
+```bash
+# Clone the repository
+git clone <repository-url>
+
+# Navigate to project directory
+cd torn-tv-chart
+
+# Install dependencies
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Development
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+# Start development server
+npm run dev
 ```
+
+Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+### Build
+
+```bash
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+```
+
+## Usage
+
+1. **Select a Symbol** - Click on any stock symbol in the right sidebar
+2. **Change Time Interval** - Use the interval buttons (1H, 12H, D, W) at the top
+3. **Toggle Indicators** - Click on any indicator in the legend to show/hide it
+4. **Navigate** - Use Previous/Next buttons to cycle through symbols
+5. **Zoom & Pan** - Scroll to zoom, drag to pan the chart
