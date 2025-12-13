@@ -259,6 +259,8 @@ function CandleChart({ data }: ChartProps) {
     const volumeOptions: Partial<HistogramSeriesOptions> = {
       color: '#26a69a',
       priceScaleId: 'volume',
+      priceLineVisible: false,
+      lastValueVisible: false,
     }
     const volumeSeries = chart.addSeries(HistogramSeries, volumeOptions)
     volumeSeries.priceScale().applyOptions({
