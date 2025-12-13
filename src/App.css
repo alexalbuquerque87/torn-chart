@@ -211,6 +211,10 @@ body {
   color: #26a69a;
 }
 
+.chart-legend .rsi {
+  color: #f59e0b;
+}
+
 .watchlist {
   width: 200px;
   border-left: 1px solid #1f2933;

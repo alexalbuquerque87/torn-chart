@@ -18,6 +18,7 @@ import type {
   LineData,
   HistogramData,
   MouseEventParams,
+  LineStyle,
 } from 'lightweight-charts'
 import './App.css'
 
@@ -96,6 +97,40 @@ function computeEma(candles: Candle[], period: number): LineData<Time>[] {
   return result
 }
 
+function computeRsi(candles: Candle[], period = 14): LineData<Time>[] {
+  if (candles.length < period + 1) return []
+
+  const result: LineData<Time>[] = []
+  const gains: number[] = []
+  const losses: number[] = []
+
+  for (let i = 1; i < candles.length; i++) {
+    const change = candles[i].close - candles[i - 1].close
+    gains.push(change > 0 ? change : 0)
+    losses.push(change < 0 ? -change : 0)
+  }
+
+  let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period
+  let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period
+
+  for (let i = period; i < candles.length; i++) {
+    if (avgLoss === 0) {
+      result.push({ time: candles[i].time, value: 100 })
+    } else {
+      const rs = avgGain / avgLoss
+      const rsi = 100 - 100 / (1 + rs)
+      result.push({ time: candles[i].time, value: rsi })
+    }
+
+    if (i < candles.length - 1) {
+      avgGain = (avgGain * (period - 1) + gains[i]) / period
+      avgLoss = (avgLoss * (period - 1) + losses[i]) / period
+    }
+  }
+
+  return result
+}
+
 function mapIntervalToApi(interval: Interval): ApiInterval {
   const mapping: Record<Interval, ApiInterval> = {
     '1h': 'h1',
@@ -149,6 +184,9 @@ function CandleChart({ data }: ChartProps) {
   const ema50Ref = useRef<ISeriesApi<'Line'> | null>(null)
   const ema200Ref = useRef<ISeriesApi<'Line'> | null>(null)
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const rsi70Ref = useRef<ISeriesApi<'Line'> | null>(null)
+  const rsi30Ref = useRef<ISeriesApi<'Line'> | null>(null)
 
   const [legend, setLegend] = useState<{
     ema9?: number
@@ -158,6 +196,7 @@ function CandleChart({ data }: ChartProps) {
     bbUpper?: number
     bbLower?: number
     volume?: number
+    rsi?: number
   } | null>(null)
 
   const [visibleEmas, setVisibleEmas] = useState({
@@ -168,7 +207,8 @@ function CandleChart({ data }: ChartProps) {
   })
 
   const [visibleBB, setVisibleBB] = useState(true)
-  const [visibleVolume, setVisibleVolume] = useState(true)
+  const [visibleVolume, setVisibleVolume] = useState(false)
+  const [visibleRsi, setVisibleRsi] = useState(true)
 
   const options: CandlestickSeriesOptions = useMemo(
     () => ({
@@ -271,6 +311,38 @@ function CandleChart({ data }: ChartProps) {
     })
     volumeSeriesRef.current = volumeSeries
 
+    // Adicionar série RSI
+    const rsiOptions: Partial<LineSeriesOptions> = {
+      color: '#f59e0b',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceScaleId: 'rsi',
+    }
+    const rsiSeries = chart.addSeries(LineSeries, rsiOptions)
+    rsiSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.85,
+        bottom: 0,
+      },
+    })
+    rsiSeriesRef.current = rsiSeries
+
+    // Adicionar linhas de referência RSI 70 e 30
+    const rsiLevelOptions: Partial<LineSeriesOptions> = {
+      color: '#6b7280',
+      lineWidth: 1,
+      lineStyle: 2 as LineStyle, // Dashed
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceScaleId: 'rsi',
+      crosshairMarkerVisible: false,
+    }
+    const rsi70Series = chart.addSeries(LineSeries, rsiLevelOptions)
+    const rsi30Series = chart.addSeries(LineSeries, rsiLevelOptions)
+    rsi70Ref.current = rsi70Series
+    rsi30Ref.current = rsi30Series
+
     const handleCrosshairMove = (param: MouseEventParams<Time>) => {
       if (!param.point || !param.time) {
         setLegend(null)
@@ -301,6 +373,7 @@ function CandleChart({ data }: ChartProps) {
         bbUpper: getValue(bbUpperRef),
         bbLower: getValue(bbLowerRef),
         volume: getVolumeValue(),
+        rsi: getValue(rsiSeriesRef),
       })
     }
 
@@ -331,6 +404,9 @@ function CandleChart({ data }: ChartProps) {
       ema50Ref.current = null
       ema200Ref.current = null
       volumeSeriesRef.current = null
+      rsiSeriesRef.current = null
+      rsi70Ref.current = null
+      rsi30Ref.current = null
     }
   }, [options])
 
@@ -379,6 +455,28 @@ function CandleChart({ data }: ChartProps) {
       volumeSeriesRef.current.setData(volumeData)
     }
 
+    // Adicionar dados do RSI
+    const rsi = computeRsi(data)
+    if (rsiSeriesRef.current) {
+      rsiSeriesRef.current.setData(rsi)
+    }
+
+    // Adicionar linhas de referência RSI 70 e 30
+    if (rsi70Ref.current && data.length > 0) {
+      const rsi70Data: LineData<Time>[] = data.map((candle) => ({
+        time: candle.time,
+        value: 70,
+      }))
+      rsi70Ref.current.setData(rsi70Data)
+    }
+    if (rsi30Ref.current && data.length > 0) {
+      const rsi30Data: LineData<Time>[] = data.map((candle) => ({
+        time: candle.time,
+        value: 30,
+      }))
+      rsi30Ref.current.setData(rsi30Data)
+    }
+
     // Aplicar visibilidade das EMAs
     if (ema9Ref.current) {
       ema9Ref.current.applyOptions({ visible: visibleEmas.ema9 })
@@ -406,12 +504,23 @@ function CandleChart({ data }: ChartProps) {
       volumeSeriesRef.current.applyOptions({ visible: visibleVolume })
     }
 
+    // Aplicar visibilidade do RSI
+    if (rsiSeriesRef.current) {
+      rsiSeriesRef.current.applyOptions({ visible: visibleRsi })
+    }
+    if (rsi70Ref.current) {
+      rsi70Ref.current.applyOptions({ visible: visibleRsi })
+    }
+    if (rsi30Ref.current) {
+      rsi30Ref.current.applyOptions({ visible: visibleRsi })
+    }
+
     if (previousRange != null) {
       timeScale.setVisibleLogicalRange(previousRange)
     } else {
       timeScale.fitContent()
     }
-  }, [data, visibleEmas, visibleBB, visibleVolume])
+  }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi])
 
   const formatValue = (v?: number) => (v != null ? v.toFixed(2) : '-')
   const formatVolume = (v?: number) => {
@@ -424,6 +533,24 @@ function CandleChart({ data }: ChartProps) {
 
   const toggleEma = (ema: keyof typeof visibleEmas) => {
     setVisibleEmas((prev) => ({ ...prev, [ema]: !prev[ema] }))
+  }
+
+  const toggleVolume = () => {
+    if (!visibleVolume) {
+      setVisibleVolume(true)
+      setVisibleRsi(false)
+    } else {
+      setVisibleVolume(false)
+    }
+  }
+
+  const toggleRsi = () => {
+    if (!visibleRsi) {
+      setVisibleRsi(true)
+      setVisibleVolume(false)
+    } else {
+      setVisibleRsi(false)
+    }
   }
 
   return (
@@ -464,9 +591,15 @@ function CandleChart({ data }: ChartProps) {
         <div>
           <span
             className={`legend-item volume ${!visibleVolume ? 'disabled' : ''}`}
-            onClick={() => setVisibleVolume(!visibleVolume)}
+            onClick={toggleVolume}
           >
             Volume: {formatVolume(legend?.volume)}
+          </span>
+          <span
+            className={`legend-item rsi ${!visibleRsi ? 'disabled' : ''}`}
+            onClick={toggleRsi}
+          >
+            RSI: {formatValue(legend?.rsi)}
           </span>
         </div>
       </div>
