@@ -5,15 +5,18 @@ import {
   CandlestickSeries,
   CrosshairMode,
   LineSeries,
+  HistogramSeries,
 } from 'lightweight-charts'
 import type {
   IChartApi,
   ISeriesApi,
   CandlestickSeriesOptions,
   LineSeriesOptions,
+  HistogramSeriesOptions,
   Time,
   CandlestickData,
   LineData,
+  HistogramData,
   MouseEventParams,
 } from 'lightweight-charts'
 import './App.css'
@@ -31,9 +34,10 @@ type ApiResponse = {
   data: RawCandle[]
 }
 
-type Interval = 'd1'
+type Interval = '1h' | '12h' | 'd1' | 'w1'
+type ApiInterval = 'h1' | 'h12' | 'd1' | 'w1'
 
-type Candle = CandlestickData
+type Candle = CandlestickData & { volume: number }
 
 type BollingerBands = {
   basis: LineData<Time>[]
@@ -92,8 +96,19 @@ function computeEma(candles: Candle[], period: number): LineData<Time>[] {
   return result
 }
 
+function mapIntervalToApi(interval: Interval): ApiInterval {
+  const mapping: Record<Interval, ApiInterval> = {
+    '1h': 'h1',
+    '12h': 'h12',
+    'd1': 'd1',
+    'w1': 'w1',
+  }
+  return mapping[interval]
+}
+
 async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> {
-  const url = `https://tornsy.com/api/${ticker}?interval=${interval}`
+  const apiInterval = mapIntervalToApi(interval)
+  const url = `https://tornsy.com/api/${ticker}?interval=${apiInterval}`
   const res = await fetch(url)
 
   if (!res.ok) {
@@ -107,13 +122,14 @@ async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> 
   }
 
   return json.data.map((item) => {
-    const [ts, open, high, low, close] = item
+    const [ts, open, high, low, close, volume] = item
     return {
       time: ts as Time,
       open: Number(open),
       high: Number(high),
       low: Number(low),
-      close: Number(close)
+      close: Number(close),
+      volume: volume
     }
   })
 }
@@ -132,6 +148,7 @@ function CandleChart({ data }: ChartProps) {
   const ema20Ref = useRef<ISeriesApi<'Line'> | null>(null)
   const ema50Ref = useRef<ISeriesApi<'Line'> | null>(null)
   const ema200Ref = useRef<ISeriesApi<'Line'> | null>(null)
+  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
 
   const [legend, setLegend] = useState<{
     ema9?: number
@@ -140,6 +157,7 @@ function CandleChart({ data }: ChartProps) {
     ema200?: number
     bbUpper?: number
     bbLower?: number
+    volume?: number
   } | null>(null)
 
   const [visibleEmas, setVisibleEmas] = useState({
@@ -150,6 +168,7 @@ function CandleChart({ data }: ChartProps) {
   })
 
   const [visibleBB, setVisibleBB] = useState(true)
+  const [visibleVolume, setVisibleVolume] = useState(true)
 
   const options: CandlestickSeriesOptions = useMemo(
     () => ({
@@ -236,6 +255,23 @@ function CandleChart({ data }: ChartProps) {
     ema50Ref.current = chart.addSeries(LineSeries, ema50Options)
     ema200Ref.current = chart.addSeries(LineSeries, ema200Options)
 
+    // Adicionar série de volume
+    const volumeOptions: Partial<HistogramSeriesOptions> = {
+      color: '#26a69a',
+      priceFormat: {
+        type: 'volume',
+      },
+      priceScaleId: 'volume',
+    }
+    const volumeSeries = chart.addSeries(HistogramSeries, volumeOptions)
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.85,
+        bottom: 0,
+      },
+    })
+    volumeSeriesRef.current = volumeSeries
+
     const handleCrosshairMove = (param: MouseEventParams<Time>) => {
       if (!param.point || !param.time) {
         setLegend(null)
@@ -250,6 +286,14 @@ function CandleChart({ data }: ChartProps) {
         return data?.value
       }
 
+      const getVolumeValue = () => {
+        if (!volumeSeriesRef.current) return undefined
+        const data = param.seriesData.get(volumeSeriesRef.current as unknown as ISeriesApi<'Histogram'>) as
+          | HistogramData<Time>
+          | undefined
+        return data?.value
+      }
+
       setLegend({
         ema9: getValue(ema9Ref),
         ema20: getValue(ema20Ref),
@@ -257,6 +301,7 @@ function CandleChart({ data }: ChartProps) {
         ema200: getValue(ema200Ref),
         bbUpper: getValue(bbUpperRef),
         bbLower: getValue(bbLowerRef),
+        volume: getVolumeValue(),
       })
     }
 
@@ -286,6 +331,7 @@ function CandleChart({ data }: ChartProps) {
       ema20Ref.current = null
       ema50Ref.current = null
       ema200Ref.current = null
+      volumeSeriesRef.current = null
     }
   }, [options])
 
@@ -324,6 +370,16 @@ function CandleChart({ data }: ChartProps) {
       ema200Ref.current.setData(ema200)
     }
 
+    // Adicionar dados de volume
+    if (volumeSeriesRef.current) {
+      const volumeData: HistogramData<Time>[] = data.map((candle) => ({
+        time: candle.time,
+        value: candle.volume,
+        color: candle.close >= candle.open ? '#26a69a' : '#ef5350',
+      }))
+      volumeSeriesRef.current.setData(volumeData)
+    }
+
     // Aplicar visibilidade das EMAs
     if (ema9Ref.current) {
       ema9Ref.current.applyOptions({ visible: visibleEmas.ema9 })
@@ -346,14 +402,26 @@ function CandleChart({ data }: ChartProps) {
       bbLowerRef.current.applyOptions({ visible: visibleBB })
     }
 
+    // Aplicar visibilidade do volume
+    if (volumeSeriesRef.current) {
+      volumeSeriesRef.current.applyOptions({ visible: visibleVolume })
+    }
+
     if (previousRange != null) {
       timeScale.setVisibleLogicalRange(previousRange)
     } else {
       timeScale.fitContent()
     }
-  }, [data, visibleEmas, visibleBB])
+  }, [data, visibleEmas, visibleBB, visibleVolume])
 
   const formatValue = (v?: number) => (v != null ? v.toFixed(2) : '-')
+  const formatVolume = (v?: number) => {
+    if (v == null) return '-'
+    if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B'
+    if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M'
+    if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K'
+    return v.toFixed(0)
+  }
 
   const toggleEma = (ema: keyof typeof visibleEmas) => {
     setVisibleEmas((prev) => ({ ...prev, [ema]: !prev[ema] }))
@@ -362,36 +430,46 @@ function CandleChart({ data }: ChartProps) {
   return (
     <div className="chart-inner">
       <div className="chart-legend">
-        <span
-          className={`legend-item ema9 ${!visibleEmas.ema9 ? 'disabled' : ''}`}
-          onClick={() => toggleEma('ema9')}
-        >
-          EMA 9: {formatValue(legend?.ema9)}
-        </span>
-        <span
-          className={`legend-item ema20 ${!visibleEmas.ema20 ? 'disabled' : ''}`}
-          onClick={() => toggleEma('ema20')}
-        >
-          EMA 20: {formatValue(legend?.ema20)}
-        </span>
-        <span
-          className={`legend-item ema50 ${!visibleEmas.ema50 ? 'disabled' : ''}`}
-          onClick={() => toggleEma('ema50')}
-        >
-          EMA 50: {formatValue(legend?.ema50)}
-        </span>
-        <span
-          className={`legend-item ema200 ${!visibleEmas.ema200 ? 'disabled' : ''}`}
-          onClick={() => toggleEma('ema200')}
-        >
-          EMA 200: {formatValue(legend?.ema200)}
-        </span>
-        <span
-          className={`legend-item bb ${!visibleBB ? 'disabled' : ''}`}
-          onClick={() => setVisibleBB(!visibleBB)}
-        >
-          BB: {formatValue(legend?.bbUpper)} / {formatValue(legend?.bbLower)}
-        </span>
+        <div>
+          <span
+            className={`legend-item ema9 ${!visibleEmas.ema9 ? 'disabled' : ''}`}
+            onClick={() => toggleEma('ema9')}
+          >
+            EMA 9: {formatValue(legend?.ema9)}
+          </span>
+          <span
+            className={`legend-item ema20 ${!visibleEmas.ema20 ? 'disabled' : ''}`}
+            onClick={() => toggleEma('ema20')}
+          >
+            EMA 20: {formatValue(legend?.ema20)}
+          </span>
+          <span
+            className={`legend-item ema50 ${!visibleEmas.ema50 ? 'disabled' : ''}`}
+            onClick={() => toggleEma('ema50')}
+          >
+            EMA 50: {formatValue(legend?.ema50)}
+          </span>
+          <span
+            className={`legend-item ema200 ${!visibleEmas.ema200 ? 'disabled' : ''}`}
+            onClick={() => toggleEma('ema200')}
+          >
+            EMA 200: {formatValue(legend?.ema200)}
+          </span>
+          <span
+            className={`legend-item bb ${!visibleBB ? 'disabled' : ''}`}
+            onClick={() => setVisibleBB(!visibleBB)}
+          >
+            BB: {formatValue(legend?.bbUpper)} / {formatValue(legend?.bbLower)}
+          </span>
+        </div>
+        <div>
+          <span
+            className={`legend-item volume ${!visibleVolume ? 'disabled' : ''}`}
+            onClick={() => setVisibleVolume(!visibleVolume)}
+          >
+            Volume: {formatVolume(legend?.volume)}
+          </span>
+        </div>
       </div>
       <div
         ref={containerRef}
@@ -405,7 +483,7 @@ function CandleChart({ data }: ChartProps) {
 function App() {
   const [ticker, setTicker] = useState('fhg')
   const [inputTicker, setInputTicker] = useState('fhg')
-  const [interval] = useState<Interval>('d1')
+  const [interval, setInterval] = useState<Interval>('d1')
   const [data, setData] = useState<Candle[]>([])
 
   useEffect(() => {
@@ -510,7 +588,36 @@ function App() {
         <header className="app-header">
           <div className="header-left">
             <h1>Torn Chart</h1>
-            <span className="interval">Intervalo: {interval}</span>
+            <div className="interval-group">
+              <button
+                type="button"
+                className={`interval-btn ${interval === '1h' ? 'active' : ''}`}
+                onClick={() => setInterval('1h')}
+              >
+                1H
+              </button>
+              <button
+                type="button"
+                className={`interval-btn ${interval === '12h' ? 'active' : ''}`}
+                onClick={() => setInterval('12h')}
+              >
+                12H
+              </button>
+              <button
+                type="button"
+                className={`interval-btn ${interval === 'd1' ? 'active' : ''}`}
+                onClick={() => setInterval('d1')}
+              >
+                D
+              </button>
+              <button
+                type="button"
+                className={`interval-btn ${interval === 'w1' ? 'active' : ''}`}
+                onClick={() => setInterval('w1')}
+              >
+                W
+              </button>
+            </div>
           </div>
           <form onSubmit={handleSubmit} className="controls">
             <label>
@@ -522,7 +629,13 @@ function App() {
               onChange={(e) => setInputTicker(e.target.value)}
               placeholder="fhg"
             />
-            <button type="submit">Carregar</button>
+            <button type="submit">Load</button>
+            <button type="button" className="btn-previous" onClick={handlePrevious}>
+              Previous
+            </button>
+            <button type="button" className="btn-next" onClick={handleNext}>
+              Next
+            </button>
           </form>
         </header>
 
@@ -537,15 +650,7 @@ function App() {
 
       <aside className="watchlist">
         <div className="watchlist-header">
-          <span>Ativos</span>
-          <div className="watchlist-nav">
-            <button type="button" onClick={handlePrevious}>
-              Previous
-            </button>
-            <button type="button" onClick={handleNext}>
-              Next
-            </button>
-          </div>
+          <span>Acronym</span>
         </div>
         <ul>
           {watchlist.map((symbol) => (

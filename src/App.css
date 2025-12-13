@@ -74,9 +74,54 @@ body {
   background: #1d4ed8;
 }
 
-.interval {
+.controls .btn-previous {
+  background: #dc2626;
+}
+
+.controls .btn-previous:hover {
+  background: #b91c1c;
+}
+
+.controls .btn-next {
+  background: #16a34a;
+}
+
+.controls .btn-next:hover {
+  background: #15803d;
+}
+
+.interval-group {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.interval-btn {
   font-size: 0.85rem;
   color: #9ca3af;
+  background: transparent;
+  border: 1px solid #374151;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.interval-btn:hover {
+  background: #1f2937;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+.interval-btn.active {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+.interval-btn.active:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
 }
 
 .app-main {
@@ -115,6 +160,12 @@ body {
   font-size: 0.8rem;
   color: #9ca3af;
   margin-bottom: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.chart-legend > div {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -156,6 +207,10 @@ body {
   color: #ffffff;
 }
 
+.chart-legend .volume {
+  color: #26a69a;
+}
+
 .watchlist {
   width: 200px;
   border-left: 1px solid #1f2933;
@@ -174,29 +229,6 @@ body {
   font-weight: 500;
   color: #e5e7eb;
   margin-bottom: 0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.watchlist-nav {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.watchlist-nav button {
-  padding: 0.2rem 0.4rem;
-  font-size: 0.75rem;
-  border-radius: 0.25rem;
-  border: 1px solid #374151;
-  background: #020617;
-  color: #e5e7eb;
-  cursor: pointer;
-}
-
-.watchlist-nav button:hover {
-  background: #111827;
 }
 
 .watchlist ul {
