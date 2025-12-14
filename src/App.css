@@ -90,6 +90,71 @@ body {
   background: #15803d;
 }
 
+.settings-container {
+  position: relative;
+  display: inline-block;
+}
+
+.controls .btn-settings {
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.25rem;
+  border: none;
+  background: #374151 !important;
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  height: auto;
+  line-height: 1;
+}
+
+.controls .btn-settings:hover {
+  background: #4b5563 !important;
+}
+
+.settings-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 0.25rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  min-width: 160px;
+  z-index: 1000;
+}
+
+.settings-menu button {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border: none;
+  background: transparent;
+  color: #e5e7eb;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.settings-menu button:hover {
+  background: #374151;
+}
+
+.settings-menu button:first-child {
+  border-radius: 0.25rem 0.25rem 0 0;
+}
+
+.settings-menu button:last-child {
+  border-radius: 0 0 0.25rem 0.25rem;
+}
+
 .interval-group {
   display: flex;
   gap: 0.25rem;
@@ -221,10 +286,8 @@ body {
   padding-left: 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
   height: 100vh;
   box-sizing: border-box;
-  overflow-y: auto;
   flex-shrink: 0;
 }
 
@@ -232,7 +295,8 @@ body {
   font-size: 0.9rem;
   font-weight: 500;
   color: #e5e7eb;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
+  flex-shrink: 0;
 }
 
 .watchlist ul {
@@ -242,6 +306,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 0.5rem;
 }
 
 .watchlist li button {

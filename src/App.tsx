@@ -141,7 +141,113 @@ function mapIntervalToApi(interval: Interval): ApiInterval {
   return mapping[interval]
 }
 
+// Estrutura do cache
+type CacheEntry = {
+  data: Candle[]
+  timestamp: number
+}
+
+// Tempo de expiração do cache em milissegundos
+const CACHE_EXPIRATION = {
+  '1h': 2 * 60 * 1000,      // 2 minutos para dados de 1h
+  '12h': 10 * 60 * 1000,    // 10 minutos para dados de 12h
+  'd1': 30 * 60 * 1000,     // 30 minutos para dados diários
+  'w1': 60 * 60 * 1000,     // 1 hora para dados semanais
+}
+
+function getCacheKey(ticker: string, interval: Interval): string {
+  return `ohlc_${ticker}_${interval}`
+}
+
+function getCachedData(ticker: string, interval: Interval): Candle[] | null {
+  try {
+    const key = getCacheKey(ticker, interval)
+    const cached = localStorage.getItem(key)
+    
+    if (!cached) return null
+
+    const entry: CacheEntry = JSON.parse(cached)
+    const now = Date.now()
+    const expirationTime = CACHE_EXPIRATION[interval]
+
+    // Verifica se o cache ainda é válido
+    if (now - entry.timestamp < expirationTime) {
+      return entry.data
+    } else {
+      // Cache expirado, remove
+      localStorage.removeItem(key)
+      return null
+    }
+  } catch (error) {
+    console.error('Erro ao ler cache:', error)
+    return null
+  }
+}
+
+function setCachedData(ticker: string, interval: Interval, data: Candle[]): void {
+  try {
+    const key = getCacheKey(ticker, interval)
+    const entry: CacheEntry = {
+      data,
+      timestamp: Date.now()
+    }
+    localStorage.setItem(key, JSON.stringify(entry))
+  } catch (error) {
+    console.error('Erro ao salvar cache:', error)
+    // Se o localStorage estiver cheio, limpa entradas antigas
+    if (error instanceof Error && error.name === 'QuotaExceededError') {
+      clearOldCache()
+      // Tenta salvar novamente
+      try {
+        const key = getCacheKey(ticker, interval)
+        const entry: CacheEntry = { data, timestamp: Date.now() }
+        localStorage.setItem(key, JSON.stringify(entry))
+      } catch {
+        // Se ainda falhar, ignora
+      }
+    }
+  }
+}
+
+function clearOldCache(): void {
+  try {
+    const now = Date.now()
+    const keysToRemove: string[] = []
+
+    // Percorre todas as chaves do localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('ohlc_')) {
+        try {
+          const cached = localStorage.getItem(key)
+          if (cached) {
+            const entry: CacheEntry = JSON.parse(cached)
+            // Remove se tiver mais de 2 horas
+            if (now - entry.timestamp > 2 * 60 * 60 * 1000) {
+              keysToRemove.push(key)
+            }
+          }
+        } catch {
+          // Se houver erro ao parsear, marca para remover
+          keysToRemove.push(key)
+        }
+      }
+    }
+
+    keysToRemove.forEach(key => localStorage.removeItem(key))
+  } catch (error) {
+    console.error('Erro ao limpar cache:', error)
+  }
+}
+
 async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> {
+  // Tenta buscar do cache primeiro
+  const cached = getCachedData(ticker, interval)
+  if (cached) {
+    return cached
+  }
+
+  // Se não houver cache válido, busca da API
   const apiInterval = mapIntervalToApi(interval)
   const url = `https://tornsy.com/api/${ticker}?interval=${apiInterval}`
   const res = await fetch(url)
@@ -156,7 +262,7 @@ async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> 
     throw new Error('Resposta da API em formato inesperado')
   }
 
-  return json.data.map((item) => {
+  const candles = json.data.map((item) => {
     const [ts, open, high, low, close, volume] = item
     return {
       time: ts as Time,
@@ -167,6 +273,11 @@ async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> 
       volume: volume
     }
   })
+
+  // Salva no cache
+  setCachedData(ticker, interval, candles)
+
+  return candles
 }
 
 type ChartProps = {
@@ -617,6 +728,25 @@ function App() {
   const [inputTicker, setInputTicker] = useState('fhg')
   const [interval, setInterval] = useState<Interval>('d1')
   const [data, setData] = useState<Candle[]>([])
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Fecha o menu de configurações quando clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (settingsOpen && !target.closest('.settings-container')) {
+        setSettingsOpen(false)
+      }
+    }
+
+    if (settingsOpen) {
+      document.addEventListener('click', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside)
+    }
+  }, [settingsOpen])
 
   useEffect(() => {
     let cancelled = false
@@ -625,8 +755,6 @@ function App() {
       try {
         const candles = await fetchOhlc(ticker, interval)
         if (!cancelled) {
-          // Apenas para debug: ver no console quantos candles vieram
-          console.log('Candles carregados:', candles.length)
           setData(candles)
         }
       } catch (e) {
@@ -714,6 +842,28 @@ function App() {
     handleSelectFromList(watchlist[nextIndex])
   }
 
+  const handleClearCache = () => {
+    setSettingsOpen(false)
+    if (confirm('Limpar todo o cache? Isso fará com que os dados sejam recarregados da API.')) {
+      try {
+        let cleared = 0
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i)
+          if (key && key.startsWith('ohlc_')) {
+            localStorage.removeItem(key)
+            cleared++
+          }
+        }
+        alert(`✅ Cache limpo! ${cleared} entrada(s) removida(s).`)
+        // Recarrega os dados atuais
+        window.location.reload()
+      } catch (error) {
+        alert('❌ Erro ao limpar cache')
+        console.error(error)
+      }
+    }
+  }
+
   return (
     <div className="app-root">
       <div className="app-left">
@@ -738,6 +888,23 @@ function App() {
               <button type="button" className="btn-next" onClick={handleNext}>
                 Next
               </button>
+              <div className="settings-container">
+                <button 
+                  type="button" 
+                  className="btn-settings"
+                  onClick={() => setSettingsOpen(!settingsOpen)}
+                  title="Configurações"
+                >
+                  ⚙️
+                </button>
+                {settingsOpen && (
+                  <div className="settings-menu">
+                    <button onClick={handleClearCache}>
+                      🗑️ Limpar Cache
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="interval-group">
               <button
@@ -787,6 +954,23 @@ function App() {
             <button type="button" className="btn-next" onClick={handleNext}>
               Next
             </button>
+            <div className="settings-container">
+              <button 
+                type="button" 
+                className="btn-settings"
+                onClick={() => setSettingsOpen(!settingsOpen)}
+                title="Configurações"
+              >
+                ⚙️
+              </button>
+              {settingsOpen && (
+                <div className="settings-menu">
+                  <button onClick={handleClearCache}>
+                    🗑️ Limpar Cache
+                  </button>
+                </div>
+              )}
+            </div>
           </form>
         </header>
 
