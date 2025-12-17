@@ -131,6 +131,38 @@ function computeRsi(candles: Candle[], period = 14): LineData<Time>[] {
   return result
 }
 
+type StochasticData = {
+  k: LineData<Time>[]
+  d: LineData<Time>[]
+}
+
+function computeStochastic(candles: Candle[], kPeriod = 12, dPeriod = 3): StochasticData {
+  if (candles.length < kPeriod) return { k: [], d: [] }
+
+  const kValues: LineData<Time>[] = []
+
+  // Calcular %K
+  for (let i = kPeriod - 1; i < candles.length; i++) {
+    const window = candles.slice(i - kPeriod + 1, i + 1)
+    const high = Math.max(...window.map(c => c.high))
+    const low = Math.min(...window.map(c => c.low))
+    const close = candles[i].close
+
+    const k = high === low ? 50 : ((close - low) / (high - low)) * 100
+    kValues.push({ time: candles[i].time, value: k })
+  }
+
+  // Calcular %D (média móvel de %K)
+  const dValues: LineData<Time>[] = []
+  for (let i = dPeriod - 1; i < kValues.length; i++) {
+    const window = kValues.slice(i - dPeriod + 1, i + 1)
+    const avg = window.reduce((sum, val) => sum + val.value, 0) / dPeriod
+    dValues.push({ time: kValues[i].time, value: avg })
+  }
+
+  return { k: kValues, d: dValues }
+}
+
 function mapIntervalToApi(interval: Interval): ApiInterval {
   const mapping: Record<Interval, ApiInterval> = {
     '1h': 'h1',
@@ -298,6 +330,8 @@ function CandleChart({ data }: ChartProps) {
   const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
   const rsi70Ref = useRef<ISeriesApi<'Line'> | null>(null)
   const rsi30Ref = useRef<ISeriesApi<'Line'> | null>(null)
+  const stochKRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const stochDRef = useRef<ISeriesApi<'Line'> | null>(null)
 
   const [legend, setLegend] = useState<{
     ema9?: number
@@ -308,6 +342,8 @@ function CandleChart({ data }: ChartProps) {
     bbLower?: number
     volume?: number
     rsi?: number
+    stochK?: number
+    stochD?: number
   } | null>(null)
 
   const [visibleEmas, setVisibleEmas] = useState({
@@ -320,6 +356,7 @@ function CandleChart({ data }: ChartProps) {
   const [visibleBB, setVisibleBB] = useState(true)
   const [visibleVolume, setVisibleVolume] = useState(false)
   const [visibleRsi, setVisibleRsi] = useState(true)
+  const [visibleStochastic, setVisibleStochastic] = useState(true)
 
   const options: CandlestickSeriesOptions = useMemo(
     () => ({
@@ -454,6 +491,26 @@ function CandleChart({ data }: ChartProps) {
     rsi70Ref.current = rsi70Series
     rsi30Ref.current = rsi30Series
 
+    // Adicionar séries Stochastic %K e %D
+    const stochKOptions: Partial<LineSeriesOptions> = {
+      color: '#3b82f6', // azul
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceScaleId: 'rsi', // Usar mesmo scale do RSI
+    }
+    const stochDOptions: Partial<LineSeriesOptions> = {
+      color: '#ef4444', // vermelho
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceScaleId: 'rsi',
+    }
+    const stochKSeries = chart.addSeries(LineSeries, stochKOptions)
+    const stochDSeries = chart.addSeries(LineSeries, stochDOptions)
+    stochKRef.current = stochKSeries
+    stochDRef.current = stochDSeries
+
     const handleCrosshairMove = (param: MouseEventParams<Time>) => {
       if (!param.point || !param.time) {
         setLegend(null)
@@ -485,6 +542,8 @@ function CandleChart({ data }: ChartProps) {
         bbLower: getValue(bbLowerRef),
         volume: getVolumeValue(),
         rsi: getValue(rsiSeriesRef),
+        stochK: getValue(stochKRef),
+        stochD: getValue(stochDRef),
       })
     }
 
@@ -518,6 +577,8 @@ function CandleChart({ data }: ChartProps) {
       rsiSeriesRef.current = null
       rsi70Ref.current = null
       rsi30Ref.current = null
+      stochKRef.current = null
+      stochDRef.current = null
     }
   }, [options])
 
@@ -588,6 +649,15 @@ function CandleChart({ data }: ChartProps) {
       rsi30Ref.current.setData(rsi30Data)
     }
 
+    // Adicionar dados do Stochastic
+    const stochastic = computeStochastic(data, 12, 3)
+    if (stochKRef.current) {
+      stochKRef.current.setData(stochastic.k)
+    }
+    if (stochDRef.current) {
+      stochDRef.current.setData(stochastic.d)
+    }
+
     // Aplicar visibilidade das EMAs
     if (ema9Ref.current) {
       ema9Ref.current.applyOptions({ visible: visibleEmas.ema9 })
@@ -626,12 +696,20 @@ function CandleChart({ data }: ChartProps) {
       rsi30Ref.current.applyOptions({ visible: visibleRsi })
     }
 
+    // Aplicar visibilidade do Stochastic
+    if (stochKRef.current) {
+      stochKRef.current.applyOptions({ visible: visibleStochastic })
+    }
+    if (stochDRef.current) {
+      stochDRef.current.applyOptions({ visible: visibleStochastic })
+    }
+
     if (previousRange != null) {
       timeScale.setVisibleLogicalRange(previousRange)
     } else {
       timeScale.fitContent()
     }
-  }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi])
+  }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi, visibleStochastic])
 
   const formatValue = (v?: number) => (v != null ? v.toFixed(2) : '-')
   const formatVolume = (v?: number) => {
@@ -650,6 +728,7 @@ function CandleChart({ data }: ChartProps) {
     if (!visibleVolume) {
       setVisibleVolume(true)
       setVisibleRsi(false)
+      setVisibleStochastic(false)
     } else {
       setVisibleVolume(false)
     }
@@ -661,6 +740,15 @@ function CandleChart({ data }: ChartProps) {
       setVisibleVolume(false)
     } else {
       setVisibleRsi(false)
+    }
+  }
+
+  const toggleStochastic = () => {
+    if (!visibleStochastic) {
+      setVisibleStochastic(true)
+      setVisibleVolume(false)
+    } else {
+      setVisibleStochastic(false)
     }
   }
 
@@ -711,6 +799,12 @@ function CandleChart({ data }: ChartProps) {
             onClick={toggleRsi}
           >
             RSI: {formatValue(legend?.rsi)}
+          </span>
+          <span
+            className={`legend-item stoch ${!visibleStochastic ? 'disabled' : ''}`}
+            onClick={toggleStochastic}
+          >
+            Stoch: {formatValue(legend?.stochK)} / {formatValue(legend?.stochD)}
           </span>
         </div>
       </div>

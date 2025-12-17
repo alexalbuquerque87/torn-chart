@@ -280,6 +280,10 @@ body {
   color: #f59e0b;
 }
 
+.chart-legend .stoch {
+  color: #3b82f6;
+}
+
 .watchlist {
   width: 200px;
   border-left: 1px solid #1f2933;
