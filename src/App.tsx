@@ -958,6 +958,24 @@ function App() {
     }
   }
 
+  // Atalhos de teclado
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        handleNext()
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        handlePrevious()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [ticker, watchlist])
+
   return (
     <div className="app-root">
       <div className="app-left">
