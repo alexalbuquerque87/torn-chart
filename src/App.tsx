@@ -46,10 +46,10 @@ type BollingerBands = {
   lower: LineData<Time>[]
 }
 
-// Tipos de ferramentas de desenho
+// Drawing tool types
 type DrawingTool = 'none' | 'trendline' | 'horizontal' | 'fibonacci'
 
-// Constantes para Fibonacci
+// Fibonacci constants
 const FIBONACCI_LEVELS = [
   { value: 0, label: '0' },
   { value: 0.382, label: '0.382' },
@@ -63,7 +63,7 @@ const FIBONACCI_LEVELS = [
 
 const FIBONACCI_COLORS = ['#ef4444', '#fbbf24', '#22c55e', '#06b6d4', '#ef4444', '#8b5cf6', '#ec4899', '#f97316']
 
-// Funções utilitárias
+// Utility functions
 function formatValue(value?: number, decimals: number = 2): string {
   return value != null ? value.toFixed(decimals) : '-'
 }
@@ -220,7 +220,7 @@ function computeStochastic(candles: Candle[], kPeriod = 12, dPeriod = 3): Stocha
 
   const kValues: LineData<Time>[] = []
 
-  // Calcular %K
+  // Calculate %K
   for (let i = kPeriod - 1; i < candles.length; i++) {
     const window = candles.slice(i - kPeriod + 1, i + 1)
     const high = Math.max(...window.map(c => c.high))
@@ -231,7 +231,7 @@ function computeStochastic(candles: Candle[], kPeriod = 12, dPeriod = 3): Stocha
     kValues.push({ time: candles[i].time, value: k })
   }
 
-  // Calcular %D (média móvel de %K)
+  // Calculate %D (moving average of %K)
   const dValues: LineData<Time>[] = []
   for (let i = dPeriod - 1; i < kValues.length; i++) {
     const window = kValues.slice(i - dPeriod + 1, i + 1)
@@ -252,18 +252,18 @@ function mapIntervalToApi(interval: Interval): ApiInterval {
   return mapping[interval]
 }
 
-// Estrutura do cache
+// Cache structure
 type CacheEntry = {
   data: Candle[]
   timestamp: number
 }
 
-// Tempo de expiração do cache em milissegundos
+// Cache expiration time in milliseconds
 const CACHE_EXPIRATION = {
-  '1h': 2 * 60 * 1000,      // 2 minutos para dados de 1h
-  '12h': 10 * 60 * 1000,    // 10 minutos para dados de 12h
-  'd1': 30 * 60 * 1000,     // 30 minutos para dados diários
-  'w1': 60 * 60 * 1000,     // 1 hora para dados semanais
+  '1h': 2 * 60 * 1000,      // 2 minutes for 1h data
+  '12h': 10 * 60 * 1000,    // 10 minutes for 12h data
+  'd1': 30 * 60 * 1000,     // 30 minutes for daily data
+  'w1': 60 * 60 * 1000,     // 1 hour for weekly data
 }
 
 function getCacheKey(ticker: string, interval: Interval): string {
@@ -281,16 +281,16 @@ function getCachedData(ticker: string, interval: Interval): Candle[] | null {
     const now = Date.now()
     const expirationTime = CACHE_EXPIRATION[interval]
 
-    // Verifica se o cache ainda é válido
+    // Check if cache is still valid
     if (now - entry.timestamp < expirationTime) {
       return entry.data
     } else {
-      // Cache expirado, remove
+      // Cache expired, remove
       localStorage.removeItem(key)
       return null
     }
   } catch (error) {
-    console.error('Erro ao ler cache:', error)
+    console.error('Error reading cache:', error)
     return null
   }
 }
@@ -304,17 +304,17 @@ function setCachedData(ticker: string, interval: Interval, data: Candle[]): void
     }
     localStorage.setItem(key, JSON.stringify(entry))
   } catch (error) {
-    console.error('Erro ao salvar cache:', error)
-    // Se o localStorage estiver cheio, limpa entradas antigas
+    console.error('Error saving cache:', error)
+    // If localStorage is full, clear old entries
     if (error instanceof Error && error.name === 'QuotaExceededError') {
       clearOldCache()
-      // Tenta salvar novamente
+      // Try to save again
       try {
         const key = getCacheKey(ticker, interval)
         const entry: CacheEntry = { data, timestamp: Date.now() }
         localStorage.setItem(key, JSON.stringify(entry))
       } catch {
-        // Se ainda falhar, ignora
+        // If it still fails, ignore
       }
     }
   }
@@ -325,7 +325,7 @@ function clearOldCache(): void {
     const now = Date.now()
     const keysToRemove: string[] = []
 
-    // Percorre todas as chaves do localStorage
+    // Loop through all localStorage keys
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (key && key.startsWith('ohlc_')) {
@@ -333,13 +333,13 @@ function clearOldCache(): void {
           const cached = localStorage.getItem(key)
           if (cached) {
             const entry: CacheEntry = JSON.parse(cached)
-            // Remove se tiver mais de 2 horas
+            // Remove if older than 2 hours
             if (now - entry.timestamp > 2 * 60 * 60 * 1000) {
               keysToRemove.push(key)
             }
           }
         } catch {
-          // Se houver erro ao parsear, marca para remover
+          // If error parsing, mark for removal
           keysToRemove.push(key)
         }
       }
@@ -347,30 +347,30 @@ function clearOldCache(): void {
 
     keysToRemove.forEach(key => localStorage.removeItem(key))
   } catch (error) {
-    console.error('Erro ao limpar cache:', error)
+    console.error('Error clearing cache:', error)
   }
 }
 
 async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> {
-  // Tenta buscar do cache primeiro
+  // Try to fetch from cache first
   const cached = getCachedData(ticker, interval)
   if (cached) {
     return cached
   }
 
-  // Se não houver cache válido, busca da API
+  // If no valid cache, fetch from API
   const apiInterval = mapIntervalToApi(interval)
   const url = `https://tornsy.com/api/${ticker}?interval=${apiInterval}`
   const res = await fetch(url)
 
   if (!res.ok) {
-    throw new Error(`Erro ao buscar dados: ${res.status}`)
+    throw new Error(`Error fetching data: ${res.status}`)
   }
 
   const json = (await res.json()) as ApiResponse
 
   if (!json.data || !Array.isArray(json.data)) {
-    throw new Error('Resposta da API em formato inesperado')
+    throw new Error('API response in unexpected format')
   }
 
   const candles = json.data.map((item) => {
@@ -385,13 +385,13 @@ async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> 
     }
   })
 
-  // Salva no cache
+  // Save to cache
   setCachedData(ticker, interval, candles)
 
   return candles
 }
 
-// Componente para o botão de configurações
+// Settings button component
 function SettingsButton({ settingsOpen, setSettingsOpen, handleClearCache }: {
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
@@ -403,14 +403,14 @@ function SettingsButton({ settingsOpen, setSettingsOpen, handleClearCache }: {
         type="button" 
         className="btn-settings"
         onClick={() => setSettingsOpen(!settingsOpen)}
-        title="Configurações"
+        title="Settings"
       >
         ⚙️
       </button>
       {settingsOpen && (
         <div className="settings-menu">
           <button onClick={handleClearCache}>
-            🗑️ Limpar Cache
+            🗑️ Clear Cache
           </button>
         </div>
       )}
@@ -474,7 +474,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     price1?: number
   } | null>(null)
 
-  // Limpar desenhos quando mudar de ticker ou intervalo
+  // Clear drawings when ticker or interval changes
   useEffect(() => {
     if (chartRef.current && drawings.length > 0) {
       drawings.forEach(drawing => {
@@ -623,16 +623,16 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     rsi70Ref.current = rsi70Series
     rsi30Ref.current = rsi30Series
 
-    // Adicionar séries Stochastic %K e %D
+    // Add Stochastic %K and %D series
     const stochKOptions: Partial<LineSeriesOptions> = {
-      color: '#3b82f6', // azul
+      color: '#3b82f6', // blue
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
-      priceScaleId: 'rsi', // Usar mesmo scale do RSI
+      priceScaleId: 'rsi', // Use same scale as RSI
     }
     const stochDOptions: Partial<LineSeriesOptions> = {
-      color: '#ef4444', // vermelho
+      color: '#ef4444', // red
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -714,23 +714,23 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     }
   }, [options])
 
-  // Handler separado para cliques no gráfico (ferramentas de desenho)
+  // Separate handler for chart clicks (drawing tools)
   useEffect(() => {
     if (!chartRef.current || !seriesRef.current) return
 
     const handleChartClick = (param: MouseEventParams<Time>) => {
       if (activeTool === 'none' || !seriesRef.current) return
       
-      // Precisamos de coordenadas válidas
+      // Need valid coordinates
       if (!param.point) return
 
-      // Obter o preço exato onde o usuário clicou usando a priceScale
+      // Get exact price where user clicked using priceScale
       const series = seriesRef.current
       const clickPrice = series.coordinateToPrice(param.point.y)
       
       if (clickPrice === null || clickPrice === undefined) return
       
-      // Obter o tempo no ponto clicado (mesmo se não houver candle)
+      // Get time at clicked point (even if no candle)
       const chart = chartRef.current
       if (!chart) return
       
@@ -745,13 +745,13 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
         
         const id = `horizontal_${Date.now()}`
         
-        // Usar toda a extensão de dados disponíveis e estender além do último candle
+        // Use full data extent and extend beyond last candle
         const firstTime = data[0]?.time
         const lastTime = data[data.length - 1]?.time
         
         if (!firstTime || !lastTime) return
         
-        // Calcular tempo futuro para estender a linha até a borda direita
+        // Calculate future time to extend line to right edge
         const extendedTime = extendTimeRange(firstTime as number, lastTime as number)
         
         const lineSeries = chart.addSeries(LineSeries, {
@@ -780,17 +780,17 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       }
 
       if (!drawingInProgress) {
-        // Primeiro clique - iniciar desenho
+        // First click - start drawing
         setDrawingInProgress({ time1: clickTime, price1: clickPrice })
       } else {
-        // Segundo clique - finalizar desenho
+        // Second click - finish drawing
         const { time1, price1 } = drawingInProgress
         if (!time1 || !price1 || !chartRef.current) return
 
         const chart = chartRef.current
         const id = `${activeTool}_${Date.now()}`
 
-        // Ordenar pontos por tempo (da esquerda para direita)
+        // Sort points by time (left to right)
         const [startTime, startPrice, endTime, endPrice] = sortDrawingPoints(time1, price1, clickTime, clickPrice)
 
         if (activeTool === 'trendline') {
@@ -817,12 +817,12 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
         } else if (activeTool === 'fibonacci') {
           const seriesArray: ISeriesApi<'Line'>[] = []
           
-          // Ordenar tempos para as linhas sempre irem da esquerda para direita
+          // Sort times so lines always go left to right
           const sortedTime1 = time1 < clickTime ? time1 : clickTime
           const sortedTime2 = time1 < clickTime ? clickTime : time1
           
           FIBONACCI_LEVELS.forEach((level, index) => {
-            // Usar preços na ordem clicada, não ordenada
+            // Use prices in clicked order, not sorted
             const fibPrice = price1 + (clickPrice - price1) * level.value
             const fibLine = chart.addSeries(LineSeries, {
               color: FIBONACCI_COLORS[index],
@@ -898,7 +898,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       ema200Ref.current.setData(ema200)
     }
 
-    // Adicionar dados de volume
+    // Add volume data
     if (volumeSeriesRef.current) {
       const volumeData: HistogramData<Time>[] = data.map((candle) => ({
         time: candle.time,
@@ -908,13 +908,13 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       volumeSeriesRef.current.setData(volumeData)
     }
 
-    // Adicionar dados do RSI
+    // Add RSI data
     const rsi = computeRsi(data)
     if (rsiSeriesRef.current) {
       rsiSeriesRef.current.setData(rsi)
     }
 
-    // Adicionar linhas de referência RSI 70 e 30
+    // Add RSI reference lines 70 and 30
     if (rsi70Ref.current && data.length > 0) {
       rsi70Ref.current.setData(createReferenceLine(data, 70))
     }
@@ -922,7 +922,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       rsi30Ref.current.setData(createReferenceLine(data, 30))
     }
 
-    // Adicionar dados do Stochastic
+    // Add Stochastic data
     const stochastic = computeStochastic(data, 12, 3)
     if (stochKRef.current) {
       stochKRef.current.setData(stochastic.k)
@@ -931,7 +931,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       stochDRef.current.setData(stochastic.d)
     }
 
-    // Aplicar visibilidade das EMAs
+    // Apply EMA visibility
     if (ema9Ref.current) {
       ema9Ref.current.applyOptions({ visible: visibleEmas.ema9 })
     }
@@ -945,7 +945,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       ema200Ref.current.applyOptions({ visible: visibleEmas.ema200 })
     }
 
-    // Aplicar visibilidade das Bandas de Bollinger
+    // Apply Bollinger Bands visibility
     if (bbUpperRef.current) {
       bbUpperRef.current.applyOptions({ visible: visibleBB })
     }
@@ -953,12 +953,12 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       bbLowerRef.current.applyOptions({ visible: visibleBB })
     }
 
-    // Aplicar visibilidade do volume
+    // Apply volume visibility
     if (volumeSeriesRef.current) {
       volumeSeriesRef.current.applyOptions({ visible: visibleVolume })
     }
 
-    // Aplicar visibilidade do RSI
+    // Apply RSI visibility
     if (rsiSeriesRef.current) {
       rsiSeriesRef.current.applyOptions({ visible: visibleRsi })
     }
@@ -969,7 +969,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       rsi30Ref.current.applyOptions({ visible: visibleRsi })
     }
 
-    // Aplicar visibilidade do Stochastic
+    // Apply Stochastic visibility
     if (stochKRef.current) {
       stochKRef.current.applyOptions({ visible: visibleStochastic })
     }
@@ -1080,20 +1080,20 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
         <div className="drawing-tools-inline">
           {drawingInProgress && (
             <span className="drawing-hint-inline">
-              ✏️ Clique novamente para finalizar
+              ✏️ Click again to finish
             </span>
           )}
           <button
             className={`tool-btn ${activeTool === 'trendline' ? 'active' : ''}`}
             onClick={() => setActiveTool(activeTool === 'trendline' ? 'none' : 'trendline')}
-            title="Linha de Tendência"
+            title="Trendline"
           >
             📈
           </button>
           <button
             className={`tool-btn ${activeTool === 'horizontal' ? 'active' : ''}`}
             onClick={() => setActiveTool(activeTool === 'horizontal' ? 'none' : 'horizontal')}
-            title="Suporte/Resistência"
+            title="Support/Resistance"
           >
             ➡️
           </button>
@@ -1108,7 +1108,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
             <button
               className="tool-btn clear-btn"
               onClick={clearAllDrawings}
-              title="Limpar Desenhos"
+              title="Clear Drawings"
             >
               🗑️ ({drawings.length})
             </button>
@@ -1131,7 +1131,7 @@ function App() {
   const [data, setData] = useState<Candle[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  // Fecha o menu de configurações quando clicar fora
+  // Close settings menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement
@@ -1160,7 +1160,7 @@ function App() {
         }
       } catch (e) {
         if (!cancelled) {
-          console.error('Erro ao carregar dados:', e instanceof Error ? e.message : 'Erro desconhecido')
+          console.error('Error loading data:', e instanceof Error ? e.message : 'Unknown error')
         }
       }
     }
@@ -1239,7 +1239,7 @@ function App() {
 
   const handleClearCache = () => {
     setSettingsOpen(false)
-    if (confirm('Limpar todo o cache? Isso fará com que os dados sejam recarregados da API.')) {
+    if (confirm('Clear all cache? This will reload data from the API.')) {
       try {
         let cleared = 0
         for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -1249,17 +1249,17 @@ function App() {
             cleared++
           }
         }
-        alert(`✅ Cache limpo! ${cleared} entrada(s) removida(s).`)
-        // Recarrega os dados atuais
+        alert(`✅ Cache cleared! ${cleared} entry(ies) removed.`)
+        // Reload current data
         window.location.reload()
       } catch (error) {
-        alert('❌ Erro ao limpar cache')
+        alert('❌ Error clearing cache')
         console.error(error)
       }
     }
   }
 
-  // Atalhos de teclado
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'ArrowRight') {
