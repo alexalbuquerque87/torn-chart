@@ -420,9 +420,11 @@ function SettingsButton({ settingsOpen, setSettingsOpen, handleClearCache }: {
 
 type ChartProps = {
   data: Candle[]
+  ticker: string
+  interval: Interval
 }
 
-function CandleChart({ data }: ChartProps) {
+function CandleChart({ data, ticker, interval }: ChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -471,6 +473,22 @@ function CandleChart({ data }: ChartProps) {
     time1?: Time
     price1?: number
   } | null>(null)
+
+  // Limpar desenhos quando mudar de ticker ou intervalo
+  useEffect(() => {
+    if (chartRef.current && drawings.length > 0) {
+      drawings.forEach(drawing => {
+        if (drawing.type === 'trendline' || drawing.type === 'horizontal') {
+          chartRef.current?.removeSeries(drawing.series)
+        } else if (drawing.type === 'fibonacci') {
+          drawing.series.forEach(s => chartRef.current?.removeSeries(s))
+        }
+      })
+    }
+    setDrawings([])
+    setDrawingInProgress(null)
+    setActiveTool('none')
+  }, [ticker, interval])
 
   const options: CandlestickSeriesOptions = useMemo(
     () => ({
@@ -1346,7 +1364,7 @@ function App() {
         <main className="app-main">
           {data.length > 0 && (
             <div className="chart-container">
-              <CandleChart data={data} />
+              <CandleChart data={data} ticker={ticker} interval={interval} />
             </div>
           )}
         </main>
