@@ -732,6 +732,8 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       
       // Obter o tempo no ponto clicado (mesmo se não houver candle)
       const chart = chartRef.current
+      if (!chart) return
+      
       const clickTime = getClickTime(param, chart)
       
       if (!clickTime) return
