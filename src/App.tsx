@@ -49,6 +49,60 @@ type BollingerBands = {
 // Tipos de ferramentas de desenho
 type DrawingTool = 'none' | 'trendline' | 'horizontal' | 'fibonacci'
 
+// Constantes para Fibonacci
+const FIBONACCI_LEVELS = [
+  { value: 0, label: '0' },
+  { value: 0.382, label: '0.382' },
+  { value: 0.5, label: '0.5' },
+  { value: 0.618, label: '0.618' },
+  { value: 1, label: '1' },
+  { value: 1.618, label: '1.618' },
+  { value: 2, label: '2' },
+  { value: 2.618, label: '2.618' }
+]
+
+const FIBONACCI_COLORS = ['#ef4444', '#fbbf24', '#22c55e', '#06b6d4', '#ef4444', '#8b5cf6', '#ec4899', '#f97316']
+
+// Funções utilitárias
+function formatValue(value?: number, decimals: number = 2): string {
+  return value != null ? value.toFixed(decimals) : '-'
+}
+
+function formatVolume(value?: number): string {
+  if (value == null) return '-'
+  if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B'
+  if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M'
+  if (value >= 1e3) return (value / 1e3).toFixed(2) + 'K'
+  return value.toFixed(0)
+}
+
+function extendTimeRange(startTime: number, endTime: number, percentage: number = 0.2): number {
+  const timeRange = endTime - startTime
+  return endTime + (timeRange * percentage)
+}
+
+function getClickTime(param: MouseEventParams<Time>, chart: IChartApi): Time | null {
+  if (param.time) return param.time
+  
+  const timeFromCoord = chart.timeScale().coordinateToTime(param.point!.x)
+  if (timeFromCoord === null) return null
+  
+  return timeFromCoord as Time
+}
+
+function sortDrawingPoints(time1: Time, price1: number, time2: Time, price2: number): [Time, number, Time, number] {
+  return time1 < time2 
+    ? [time1, price1, time2, price2]
+    : [time2, price2, time1, price1]
+}
+
+function createReferenceLine(data: Candle[], value: number): LineData<Time>[] {
+  return data.map((candle) => ({
+    time: candle.time,
+    value: value,
+  }))
+}
+
 type DrawingLine = {
   id: string
   type: 'trendline' | 'horizontal'
@@ -335,6 +389,33 @@ async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> 
   setCachedData(ticker, interval, candles)
 
   return candles
+}
+
+// Componente para o botão de configurações
+function SettingsButton({ settingsOpen, setSettingsOpen, handleClearCache }: {
+  settingsOpen: boolean
+  setSettingsOpen: (open: boolean) => void
+  handleClearCache: () => void
+}) {
+  return (
+    <div className="settings-container">
+      <button 
+        type="button" 
+        className="btn-settings"
+        onClick={() => setSettingsOpen(!settingsOpen)}
+        title="Configurações"
+      >
+        ⚙️
+      </button>
+      {settingsOpen && (
+        <div className="settings-menu">
+          <button onClick={handleClearCache}>
+            🗑️ Limpar Cache
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 type ChartProps = {
@@ -633,14 +714,9 @@ function CandleChart({ data }: ChartProps) {
       
       // Obter o tempo no ponto clicado (mesmo se não houver candle)
       const chart = chartRef.current
-      let clickTime = param.time
+      const clickTime = getClickTime(param, chart)
       
-      // Se não há candle no ponto, converter coordenada X para tempo
-      if (!clickTime) {
-        const timeFromCoord = chart.timeScale().coordinateToTime(param.point.x)
-        if (timeFromCoord === null) return
-        clickTime = timeFromCoord as Time
-      }
+      if (!clickTime) return
 
       // Linha horizontal precisa apenas de 1 clique
       if (activeTool === 'horizontal') {
@@ -656,9 +732,7 @@ function CandleChart({ data }: ChartProps) {
         if (!firstTime || !lastTime) return
         
         // Calcular tempo futuro para estender a linha até a borda direita
-        // Adicionar aproximadamente 20% do range total de tempo
-        const timeRange = (lastTime as number) - (firstTime as number)
-        const extendedTime = (lastTime as number) + (timeRange * 0.2)
+        const extendedTime = extendTimeRange(firstTime as number, lastTime as number)
         
         const lineSeries = chart.addSeries(LineSeries, {
           color: '#06b6d4',
@@ -697,10 +771,7 @@ function CandleChart({ data }: ChartProps) {
         const id = `${activeTool}_${Date.now()}`
 
         // Ordenar pontos por tempo (da esquerda para direita)
-        const [startTime, startPrice, endTime, endPrice] = 
-          time1 < clickTime 
-            ? [time1, price1, clickTime, clickPrice]
-            : [clickTime, clickPrice, time1, price1]
+        const [startTime, startPrice, endTime, endPrice] = sortDrawingPoints(time1, price1, clickTime, clickPrice)
 
         if (activeTool === 'trendline') {
           const lineSeries = chart.addSeries(LineSeries, {
@@ -725,29 +796,16 @@ function CandleChart({ data }: ChartProps) {
           }])
         } else if (activeTool === 'fibonacci') {
           const seriesArray: ISeriesApi<'Line'>[] = []
-          // Níveis de retração e extensão
-          // Usar pontos na ordem clicada: primeiro clique = 0, segundo clique = 1
-          const levels = [
-            { value: 0, label: '0' },
-            { value: 0.382, label: '0.382' },
-            { value: 0.5, label: '0.5' },
-            { value: 0.618, label: '0.618' },
-            { value: 1, label: '1' },
-            { value: 1.618, label: '1.618' },
-            { value: 2, label: '2' },
-            { value: 2.618, label: '2.618' }
-          ]
-          const colors = ['#ef4444', '#fbbf24', '#22c55e', '#06b6d4', '#ef4444', '#8b5cf6', '#ec4899', '#f97316']
           
           // Ordenar tempos para as linhas sempre irem da esquerda para direita
           const sortedTime1 = time1 < clickTime ? time1 : clickTime
           const sortedTime2 = time1 < clickTime ? clickTime : time1
           
-          levels.forEach((level, index) => {
+          FIBONACCI_LEVELS.forEach((level, index) => {
             // Usar preços na ordem clicada, não ordenada
             const fibPrice = price1 + (clickPrice - price1) * level.value
             const fibLine = chart.addSeries(LineSeries, {
-              color: colors[index],
+              color: FIBONACCI_COLORS[index],
               lineWidth: level.value === 0 || level.value === 1 ? 2 : 1,
               lineStyle: 2 as LineStyle,
               priceLineVisible: true,
@@ -838,18 +896,10 @@ function CandleChart({ data }: ChartProps) {
 
     // Adicionar linhas de referência RSI 70 e 30
     if (rsi70Ref.current && data.length > 0) {
-      const rsi70Data: LineData<Time>[] = data.map((candle) => ({
-        time: candle.time,
-        value: 70,
-      }))
-      rsi70Ref.current.setData(rsi70Data)
+      rsi70Ref.current.setData(createReferenceLine(data, 70))
     }
     if (rsi30Ref.current && data.length > 0) {
-      const rsi30Data: LineData<Time>[] = data.map((candle) => ({
-        time: candle.time,
-        value: 30,
-      }))
-      rsi30Ref.current.setData(rsi30Data)
+      rsi30Ref.current.setData(createReferenceLine(data, 30))
     }
 
     // Adicionar dados do Stochastic
@@ -914,44 +964,23 @@ function CandleChart({ data }: ChartProps) {
     }
   }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi, visibleStochastic])
 
-  const formatValue = (v?: number) => (v != null ? v.toFixed(2) : '-')
-  const formatVolume = (v?: number) => {
-    if (v == null) return '-'
-    if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B'
-    if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M'
-    if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K'
-    return v.toFixed(0)
-  }
-
   const toggleEma = (ema: keyof typeof visibleEmas) => {
     setVisibleEmas((prev) => ({ ...prev, [ema]: !prev[ema] }))
   }
 
-  const toggleVolume = () => {
-    if (!visibleVolume) {
-      setVisibleVolume(true)
-      setVisibleRsi(false)
-      setVisibleStochastic(false)
-    } else {
-      setVisibleVolume(false)
+  const toggleIndicator = (indicator: 'volume' | 'rsi' | 'stochastic') => {
+    const mutuallyExclusive = {
+      volume: { set: setVisibleVolume, current: visibleVolume, disables: [setVisibleRsi, setVisibleStochastic] },
+      rsi: { set: setVisibleRsi, current: visibleRsi, disables: [setVisibleVolume] },
+      stochastic: { set: setVisibleStochastic, current: visibleStochastic, disables: [setVisibleVolume] }
     }
-  }
-
-  const toggleRsi = () => {
-    if (!visibleRsi) {
-      setVisibleRsi(true)
-      setVisibleVolume(false)
+    
+    const config = mutuallyExclusive[indicator]
+    if (!config.current) {
+      config.set(true)
+      config.disables.forEach(setter => setter(false))
     } else {
-      setVisibleRsi(false)
-    }
-  }
-
-  const toggleStochastic = () => {
-    if (!visibleStochastic) {
-      setVisibleStochastic(true)
-      setVisibleVolume(false)
-    } else {
-      setVisibleStochastic(false)
+      config.set(false)
     }
   }
 
@@ -961,7 +990,7 @@ function CandleChart({ data }: ChartProps) {
     drawings.forEach(drawing => {
       if (drawing.type === 'trendline' || drawing.type === 'horizontal') {
         chartRef.current?.removeSeries(drawing.series)
-      } else if (drawing.type === 'rectangle' || drawing.type === 'fibonacci') {
+      } else if (drawing.type === 'fibonacci') {
         drawing.series.forEach(s => chartRef.current?.removeSeries(s))
       }
     })
@@ -1010,19 +1039,19 @@ function CandleChart({ data }: ChartProps) {
         <div>
           <span
             className={`legend-item volume ${!visibleVolume ? 'disabled' : ''}`}
-            onClick={toggleVolume}
+            onClick={() => toggleIndicator('volume')}
           >
             Volume: {formatVolume(legend?.volume)}
           </span>
           <span
             className={`legend-item rsi ${!visibleRsi ? 'disabled' : ''}`}
-            onClick={toggleRsi}
+            onClick={() => toggleIndicator('rsi')}
           >
             RSI: {formatValue(legend?.rsi)}
           </span>
           <span
             className={`legend-item stoch ${!visibleStochastic ? 'disabled' : ''}`}
-            onClick={toggleStochastic}
+            onClick={() => toggleIndicator('stochastic')}
           >
             Stoch: {formatValue(legend?.stochK)} / {formatValue(legend?.stochD)}
           </span>
@@ -1178,20 +1207,14 @@ function App() {
     setInputTicker(value)
   }
 
-  const handlePrevious = () => {
+  const handleNavigate = (direction: 'prev' | 'next') => {
     const upper = ticker.toUpperCase()
     const index = watchlist.indexOf(upper)
     const currentIndex = index === -1 ? 0 : index
-    const prevIndex = (currentIndex - 1 + watchlist.length) % watchlist.length
-    handleSelectFromList(watchlist[prevIndex])
-  }
-
-  const handleNext = () => {
-    const upper = ticker.toUpperCase()
-    const index = watchlist.indexOf(upper)
-    const currentIndex = index === -1 ? 0 : index
-    const nextIndex = (currentIndex + 1) % watchlist.length
-    handleSelectFromList(watchlist[nextIndex])
+    const newIndex = direction === 'prev' 
+      ? (currentIndex - 1 + watchlist.length) % watchlist.length
+      : (currentIndex + 1) % watchlist.length
+    handleSelectFromList(watchlist[newIndex])
   }
 
   const handleClearCache = () => {
@@ -1221,10 +1244,10 @@ function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'ArrowRight') {
         event.preventDefault()
-        handleNext()
+        handleNavigate('next')
       } else if (event.key === 'ArrowLeft') {
         event.preventDefault()
-        handlePrevious()
+        handleNavigate('prev')
       }
     }
 
@@ -1252,29 +1275,17 @@ function App() {
                   </option>
                 ))}
               </select>
-              <button type="button" className="btn-previous" onClick={handlePrevious}>
+              <button type="button" className="btn-previous" onClick={() => handleNavigate('prev')}>
                 Previous
               </button>
-              <button type="button" className="btn-next" onClick={handleNext}>
+              <button type="button" className="btn-next" onClick={() => handleNavigate('next')}>
                 Next
               </button>
-              <div className="settings-container">
-                <button 
-                  type="button" 
-                  className="btn-settings"
-                  onClick={() => setSettingsOpen(!settingsOpen)}
-                  title="Configurações"
-                >
-                  ⚙️
-                </button>
-                {settingsOpen && (
-                  <div className="settings-menu">
-                    <button onClick={handleClearCache}>
-                      🗑️ Limpar Cache
-                    </button>
-                  </div>
-                )}
-              </div>
+              <SettingsButton 
+                settingsOpen={settingsOpen}
+                setSettingsOpen={setSettingsOpen}
+                handleClearCache={handleClearCache}
+              />
             </div>
             <div className="interval-group">
               <button
@@ -1318,29 +1329,17 @@ function App() {
               placeholder="fhg"
             />
             <button type="submit">Load</button>
-            <button type="button" className="btn-previous" onClick={handlePrevious}>
+            <button type="button" className="btn-previous" onClick={() => handleNavigate('prev')}>
               Previous
             </button>
-            <button type="button" className="btn-next" onClick={handleNext}>
+            <button type="button" className="btn-next" onClick={() => handleNavigate('next')}>
               Next
             </button>
-            <div className="settings-container">
-              <button 
-                type="button" 
-                className="btn-settings"
-                onClick={() => setSettingsOpen(!settingsOpen)}
-                title="Configurações"
-              >
-                ⚙️
-              </button>
-              {settingsOpen && (
-                <div className="settings-menu">
-                  <button onClick={handleClearCache}>
-                    🗑️ Limpar Cache
-                  </button>
-                </div>
-              )}
-            </div>
+            <SettingsButton 
+              settingsOpen={settingsOpen}
+              setSettingsOpen={setSettingsOpen}
+              handleClearCache={handleClearCache}
+            />
           </form>
         </header>
 
