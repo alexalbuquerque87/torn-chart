@@ -46,6 +46,31 @@ type BollingerBands = {
   lower: LineData<Time>[]
 }
 
+// Tipos de ferramentas de desenho
+type DrawingTool = 'none' | 'trendline' | 'horizontal' | 'fibonacci'
+
+type DrawingLine = {
+  id: string
+  type: 'trendline' | 'horizontal'
+  time1: Time
+  price1: number
+  time2?: Time
+  price2?: number
+  series: ISeriesApi<'Line'>
+}
+
+type DrawingFibonacci = {
+  id: string
+  type: 'fibonacci'
+  time1: Time
+  price1: number
+  time2?: Time
+  price2?: number
+  series: ISeriesApi<'Line'>[]
+}
+
+type Drawing = DrawingLine | DrawingFibonacci
+
 function computeBollingerBands(
   candles: Candle[],
   period = 20,
@@ -358,6 +383,14 @@ function CandleChart({ data }: ChartProps) {
   const [visibleRsi, setVisibleRsi] = useState(true)
   const [visibleStochastic, setVisibleStochastic] = useState(true)
 
+  // Estados para ferramentas de desenho
+  const [activeTool, setActiveTool] = useState<DrawingTool>('none')
+  const [drawings, setDrawings] = useState<Drawing[]>([])
+  const [drawingInProgress, setDrawingInProgress] = useState<{
+    time1?: Time
+    price1?: number
+  } | null>(null)
+
   const options: CandlestickSeriesOptions = useMemo(
     () => ({
       upColor: '#26a69a',
@@ -582,6 +615,176 @@ function CandleChart({ data }: ChartProps) {
     }
   }, [options])
 
+  // Handler separado para cliques no gráfico (ferramentas de desenho)
+  useEffect(() => {
+    if (!chartRef.current || !seriesRef.current) return
+
+    const handleChartClick = (param: MouseEventParams<Time>) => {
+      if (activeTool === 'none' || !seriesRef.current) return
+      
+      // Precisamos de coordenadas válidas
+      if (!param.point) return
+
+      // Obter o preço exato onde o usuário clicou usando a priceScale
+      const series = seriesRef.current
+      const clickPrice = series.coordinateToPrice(param.point.y)
+      
+      if (clickPrice === null || clickPrice === undefined) return
+      
+      // Obter o tempo no ponto clicado (mesmo se não houver candle)
+      const chart = chartRef.current
+      let clickTime = param.time
+      
+      // Se não há candle no ponto, converter coordenada X para tempo
+      if (!clickTime) {
+        const timeFromCoord = chart.timeScale().coordinateToTime(param.point.x)
+        if (timeFromCoord === null) return
+        clickTime = timeFromCoord as Time
+      }
+
+      // Linha horizontal precisa apenas de 1 clique
+      if (activeTool === 'horizontal') {
+        const chart = chartRef.current
+        if (!chart) return
+        
+        const id = `horizontal_${Date.now()}`
+        
+        // Usar toda a extensão de dados disponíveis e estender além do último candle
+        const firstTime = data[0]?.time
+        const lastTime = data[data.length - 1]?.time
+        
+        if (!firstTime || !lastTime) return
+        
+        // Calcular tempo futuro para estender a linha até a borda direita
+        // Adicionar aproximadamente 20% do range total de tempo
+        const timeRange = (lastTime as number) - (firstTime as number)
+        const extendedTime = (lastTime as number) + (timeRange * 0.2)
+        
+        const lineSeries = chart.addSeries(LineSeries, {
+          color: '#06b6d4',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+        lineSeries.setData([
+          { time: firstTime, value: clickPrice },
+          { time: extendedTime as Time, value: clickPrice }
+        ])
+        
+        setDrawings(prev => [...prev, {
+          id,
+          type: 'horizontal',
+          time1: clickTime,
+          price1: clickPrice,
+          time2: lastTime,
+          price2: clickPrice,
+          series: lineSeries
+        }])
+        
+        setActiveTool('none')
+        return
+      }
+
+      if (!drawingInProgress) {
+        // Primeiro clique - iniciar desenho
+        setDrawingInProgress({ time1: clickTime, price1: clickPrice })
+      } else {
+        // Segundo clique - finalizar desenho
+        const { time1, price1 } = drawingInProgress
+        if (!time1 || !price1 || !chartRef.current) return
+
+        const chart = chartRef.current
+        const id = `${activeTool}_${Date.now()}`
+
+        // Ordenar pontos por tempo (da esquerda para direita)
+        const [startTime, startPrice, endTime, endPrice] = 
+          time1 < clickTime 
+            ? [time1, price1, clickTime, clickPrice]
+            : [clickTime, clickPrice, time1, price1]
+
+        if (activeTool === 'trendline') {
+          const lineSeries = chart.addSeries(LineSeries, {
+            color: '#fbbf24',
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          })
+          lineSeries.setData([
+            { time: startTime, value: startPrice },
+            { time: endTime, value: endPrice }
+          ])
+          
+          setDrawings(prev => [...prev, {
+            id,
+            type: 'trendline',
+            time1,
+            price1,
+            time2: clickTime,
+            price2: clickPrice,
+            series: lineSeries
+          }])
+        } else if (activeTool === 'fibonacci') {
+          const seriesArray: ISeriesApi<'Line'>[] = []
+          // Níveis de retração e extensão
+          // Usar pontos na ordem clicada: primeiro clique = 0, segundo clique = 1
+          const levels = [
+            { value: 0, label: '0' },
+            { value: 0.382, label: '0.382' },
+            { value: 0.5, label: '0.5' },
+            { value: 0.618, label: '0.618' },
+            { value: 1, label: '1' },
+            { value: 1.618, label: '1.618' },
+            { value: 2, label: '2' },
+            { value: 2.618, label: '2.618' }
+          ]
+          const colors = ['#ef4444', '#fbbf24', '#22c55e', '#06b6d4', '#ef4444', '#8b5cf6', '#ec4899', '#f97316']
+          
+          // Ordenar tempos para as linhas sempre irem da esquerda para direita
+          const sortedTime1 = time1 < clickTime ? time1 : clickTime
+          const sortedTime2 = time1 < clickTime ? clickTime : time1
+          
+          levels.forEach((level, index) => {
+            // Usar preços na ordem clicada, não ordenada
+            const fibPrice = price1 + (clickPrice - price1) * level.value
+            const fibLine = chart.addSeries(LineSeries, {
+              color: colors[index],
+              lineWidth: level.value === 0 || level.value === 1 ? 2 : 1,
+              lineStyle: 2 as LineStyle,
+              priceLineVisible: true,
+              lastValueVisible: true,
+              title: level.label,
+            })
+            fibLine.setData([
+              { time: sortedTime1, value: fibPrice },
+              { time: sortedTime2, value: fibPrice }
+            ])
+            seriesArray.push(fibLine)
+          })
+          
+          setDrawings(prev => [...prev, {
+            id,
+            type: 'fibonacci',
+            time1,
+            price1,
+            time2: clickTime,
+            price2: clickPrice,
+            series: seriesArray
+          }])
+        }
+
+        setDrawingInProgress(null)
+        setActiveTool('none')
+      }
+    }
+
+    const chart = chartRef.current
+    chart.subscribeClick(handleChartClick)
+
+    return () => {
+      chart.unsubscribeClick(handleChartClick)
+    }
+  }, [activeTool, drawingInProgress, data, drawings])
+
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return
 
@@ -752,16 +955,33 @@ function CandleChart({ data }: ChartProps) {
     }
   }
 
+  const clearAllDrawings = () => {
+    if (!chartRef.current) return
+    
+    drawings.forEach(drawing => {
+      if (drawing.type === 'trendline' || drawing.type === 'horizontal') {
+        chartRef.current?.removeSeries(drawing.series)
+      } else if (drawing.type === 'rectangle' || drawing.type === 'fibonacci') {
+        drawing.series.forEach(s => chartRef.current?.removeSeries(s))
+      }
+    })
+    
+    setDrawings([])
+    setDrawingInProgress(null)
+    setActiveTool('none')
+  }
+
   return (
     <div className="chart-inner">
-      <div className="chart-legend">
-        <div>
-          <span
-            className={`legend-item ema9 ${!visibleEmas.ema9 ? 'disabled' : ''}`}
-            onClick={() => toggleEma('ema9')}
-          >
-            EMA 9: {formatValue(legend?.ema9)}
-          </span>
+      <div className="legend-and-tools">
+        <div className="chart-legend">
+          <div>
+            <span
+              className={`legend-item ema9 ${!visibleEmas.ema9 ? 'disabled' : ''}`}
+              onClick={() => toggleEma('ema9')}
+            >
+              EMA 9: {formatValue(legend?.ema9)}
+            </span>
           <span
             className={`legend-item ema20 ${!visibleEmas.ema20 ? 'disabled' : ''}`}
             onClick={() => toggleEma('ema20')}
@@ -806,6 +1026,44 @@ function CandleChart({ data }: ChartProps) {
           >
             Stoch: {formatValue(legend?.stochK)} / {formatValue(legend?.stochD)}
           </span>
+        </div>
+        </div>
+        <div className="drawing-tools-inline">
+          {drawingInProgress && (
+            <span className="drawing-hint-inline">
+              ✏️ Clique novamente para finalizar
+            </span>
+          )}
+          <button
+            className={`tool-btn ${activeTool === 'trendline' ? 'active' : ''}`}
+            onClick={() => setActiveTool(activeTool === 'trendline' ? 'none' : 'trendline')}
+            title="Linha de Tendência"
+          >
+            📈
+          </button>
+          <button
+            className={`tool-btn ${activeTool === 'horizontal' ? 'active' : ''}`}
+            onClick={() => setActiveTool(activeTool === 'horizontal' ? 'none' : 'horizontal')}
+            title="Suporte/Resistência"
+          >
+            ➡️
+          </button>
+          <button
+            className={`tool-btn ${activeTool === 'fibonacci' ? 'active' : ''}`}
+            onClick={() => setActiveTool(activeTool === 'fibonacci' ? 'none' : 'fibonacci')}
+            title="Fibonacci"
+          >
+            φ
+          </button>
+          {drawings.length > 0 && (
+            <button
+              className="tool-btn clear-btn"
+              onClick={clearAllDrawings}
+              title="Limpar Desenhos"
+            >
+              🗑️ ({drawings.length})
+            </button>
+          )}
         </div>
       </div>
       <div

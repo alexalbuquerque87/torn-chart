@@ -221,6 +221,76 @@ body {
   height: 100%;
 }
 
+.legend-and-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.drawing-tools-inline {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.tool-btn {
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.25rem;
+  border: 1px solid #374151;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.tool-btn:hover {
+  background: #1f2937;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+.tool-btn.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.tool-btn.clear-btn {
+  margin-left: auto;
+  background: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+.tool-btn.clear-btn:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.drawing-hint-inline {
+  font-size: 0.85rem;
+  color: #fbbf24;
+  margin-right: 1rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 .chart-legend {
   font-size: 0.8rem;
   color: #9ca3af;
