@@ -496,7 +496,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
   useEffect(() => {
     if (chartRef.current && drawings.length > 0) {
       drawings.forEach(drawing => {
-        if (drawing.type === 'trendline' || drawing.type === 'horizontal') {
+        if (drawing.type === 'trendline' || drawing.type === 'horizontal' || drawing.type === 'ruler') {
           chartRef.current?.removeSeries(drawing.series)
         } else if (drawing.type === 'fibonacci') {
           drawing.series.forEach(s => chartRef.current?.removeSeries(s))
