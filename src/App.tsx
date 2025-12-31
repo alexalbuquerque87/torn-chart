@@ -47,7 +47,7 @@ type BollingerBands = {
 }
 
 // Drawing tool types
-type DrawingTool = 'none' | 'trendline' | 'horizontal' | 'fibonacci'
+type DrawingTool = 'none' | 'trendline' | 'horizontal' | 'fibonacci' | 'ruler'
 
 // Fibonacci constants
 const FIBONACCI_LEVELS = [
@@ -113,6 +113,17 @@ type DrawingLine = {
   series: ISeriesApi<'Line'>
 }
 
+type DrawingRuler = {
+  id: string
+  type: 'ruler'
+  time1: Time
+  price1: number
+  time2?: Time
+  price2?: number
+  percentChange: number
+  series: ISeriesApi<'Line'>
+}
+
 type DrawingFibonacci = {
   id: string
   type: 'fibonacci'
@@ -123,7 +134,7 @@ type DrawingFibonacci = {
   series: ISeriesApi<'Line'>[]
 }
 
-type Drawing = DrawingLine | DrawingFibonacci
+type Drawing = DrawingLine | DrawingRuler | DrawingFibonacci
 
 function computeBollingerBands(
   candles: Candle[],
@@ -814,6 +825,34 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
             price2: clickPrice,
             series: lineSeries
           }])
+        } else if (activeTool === 'ruler') {
+          // Calculate percentage change
+          const percentChange = ((clickPrice - price1) / price1) * 100
+          const sign = percentChange >= 0 ? '+' : ''
+          const label = `${sign}${percentChange.toFixed(2)}%`
+          
+          const lineSeries = chart.addSeries(LineSeries, {
+            color: '#a855f7', // purple
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            title: label,
+          })
+          lineSeries.setData([
+            { time: startTime, value: startPrice },
+            { time: endTime, value: endPrice }
+          ])
+          
+          setDrawings(prev => [...prev, {
+            id,
+            type: 'ruler',
+            time1,
+            price1,
+            time2: clickTime,
+            price2: clickPrice,
+            percentChange,
+            series: lineSeries
+          }])
         } else if (activeTool === 'fibonacci') {
           const seriesArray: ISeriesApi<'Line'>[] = []
           
@@ -1008,7 +1047,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     if (!chartRef.current) return
     
     drawings.forEach(drawing => {
-      if (drawing.type === 'trendline' || drawing.type === 'horizontal') {
+      if (drawing.type === 'trendline' || drawing.type === 'horizontal' || drawing.type === 'ruler') {
         chartRef.current?.removeSeries(drawing.series)
       } else if (drawing.type === 'fibonacci') {
         drawing.series.forEach(s => chartRef.current?.removeSeries(s))
@@ -1103,6 +1142,13 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
             title="Fibonacci"
           >
             φ
+          </button>
+          <button
+            className={`tool-btn ${activeTool === 'ruler' ? 'active' : ''}`}
+            onClick={() => setActiveTool(activeTool === 'ruler' ? 'none' : 'ruler')}
+            title="Ruler (% Change)"
+          >
+            📏
           </button>
           {drawings.length > 0 && (
             <button
