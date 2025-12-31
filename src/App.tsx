@@ -490,6 +490,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     time1?: Time
     price1?: number
   } | null>(null)
+  const [shiftPressed, setShiftPressed] = useState(false)
 
   // Clear drawings when ticker or interval changes
   useEffect(() => {
@@ -506,6 +507,24 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     setDrawingInProgress(null)
     setActiveTool('none')
   }, [ticker, interval])
+
+  // Track Shift key state
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(true)
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [])
 
   const options: CandlestickSeriesOptions = useMemo(
     () => ({
@@ -736,7 +755,12 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     if (!chartRef.current || !seriesRef.current) return
 
     const handleChartClick = (param: MouseEventParams<Time>) => {
-      if (activeTool === 'none' || !seriesRef.current) return
+      if (!seriesRef.current) return
+      
+      // Shift+click activates ruler temporarily
+      const effectiveTool = shiftPressed && activeTool === 'none' ? 'ruler' : activeTool
+      
+      if (effectiveTool === 'none') return
       
       // Need valid coordinates
       if (!param.point) return
@@ -756,7 +780,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       if (!clickTime) return
 
       // Linha horizontal precisa apenas de 1 clique
-      if (activeTool === 'horizontal') {
+      if (effectiveTool === 'horizontal') {
         const chart = chartRef.current
         if (!chart) return
         
@@ -805,12 +829,12 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
         if (!time1 || !price1 || !chartRef.current) return
 
         const chart = chartRef.current
-        const id = `${activeTool}_${Date.now()}`
+        const id = `${effectiveTool}_${Date.now()}`
 
         // Sort points by time (left to right)
         const [startTime, startPrice, endTime, endPrice] = sortDrawingPoints(time1, price1, clickTime, clickPrice)
 
-        if (activeTool === 'trendline') {
+        if (effectiveTool === 'trendline') {
           const lineSeries = chart.addSeries(LineSeries, {
             color: '#fbbf24',
             lineWidth: 2,
@@ -831,7 +855,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
             price2: clickPrice,
             series: lineSeries
           }])
-        } else if (activeTool === 'ruler') {
+        } else if (effectiveTool === 'ruler') {
           // Calculate percentage change
           const percentChange = ((clickPrice - price1) / price1) * 100
           const sign = percentChange >= 0 ? '+' : ''
@@ -859,7 +883,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
             percentChange,
             series: lineSeries
           }])
-        } else if (activeTool === 'fibonacci') {
+        } else if (effectiveTool === 'fibonacci') {
           const seriesArray: ISeriesApi<'Line'>[] = []
           
           // Sort times so lines always go left to right
@@ -896,7 +920,10 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
         }
 
         setDrawingInProgress(null)
-        setActiveTool('none')
+        // If using Shift shortcut, don't change activeTool
+        if (activeTool !== 'none') {
+          setActiveTool('none')
+        }
       }
     }
 
@@ -906,7 +933,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     return () => {
       chart.unsubscribeClick(handleChartClick)
     }
-  }, [activeTool, drawingInProgress, data, drawings])
+  }, [activeTool, drawingInProgress, data, drawings, shiftPressed])
 
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return
