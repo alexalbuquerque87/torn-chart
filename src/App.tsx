@@ -35,8 +35,8 @@ type ApiResponse = {
   data: RawCandle[]
 }
 
-type Interval = '1h' | '12h' | 'd1' | 'w1'
-type ApiInterval = 'h1' | 'h12' | 'd1' | 'w1'
+type Interval = '1h' | '2h' | '4h' | '6h' | '12h' | 'd1' | 'w1'
+type ApiInterval = 'h1' | 'h2' | 'h4' | 'h6' | 'h12' | 'd1' | 'w1'
 
 type Candle = CandlestickData & { volume: number }
 
@@ -256,6 +256,9 @@ function computeStochastic(candles: Candle[], kPeriod = 12, dPeriod = 3): Stocha
 function mapIntervalToApi(interval: Interval): ApiInterval {
   const mapping: Record<Interval, ApiInterval> = {
     '1h': 'h1',
+    '2h': 'h2',
+    '4h': 'h4',
+    '6h': 'h6',
     '12h': 'h12',
     'd1': 'd1',
     'w1': 'w1',
@@ -272,6 +275,9 @@ type CacheEntry = {
 // Cache expiration time in milliseconds
 const CACHE_EXPIRATION = {
   '1h': 2 * 60 * 1000,      // 2 minutes for 1h data
+  '2h': 3 * 60 * 1000,      // 3 minutes for 2h data
+  '4h': 5 * 60 * 1000,      // 5 minutes for 4h data
+  '6h': 7 * 60 * 1000,      // 7 minutes for 6h data
   '12h': 10 * 60 * 1000,    // 10 minutes for 12h data
   'd1': 30 * 60 * 1000,     // 30 minutes for daily data
   'w1': 60 * 60 * 1000,     // 1 hour for weekly data
@@ -1360,6 +1366,27 @@ function App() {
                 onClick={() => setInterval('1h')}
               >
                 1H
+              </button>
+              <button
+                type="button"
+                className={`interval-btn ${interval === '2h' ? 'active' : ''}`}
+                onClick={() => setInterval('2h')}
+              >
+                2H
+              </button>
+              <button
+                type="button"
+                className={`interval-btn ${interval === '4h' ? 'active' : ''}`}
+                onClick={() => setInterval('4h')}
+              >
+                4H
+              </button>
+              <button
+                type="button"
+                className={`interval-btn ${interval === '6h' ? 'active' : ''}`}
+                onClick={() => setInterval('6h')}
+              >
+                6H
               </button>
               <button
                 type="button"
