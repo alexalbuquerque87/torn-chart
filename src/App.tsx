@@ -476,6 +476,10 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
   const stochDRef = useRef<ISeriesApi<'Line'> | null>(null)
 
   const [legend, setLegend] = useState<{
+    open?: number
+    high?: number
+    low?: number
+    close?: number
     ema9?: number
     ema20?: number
     ema50?: number
@@ -719,7 +723,26 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
         return data?.value
       }
 
+      const getCandleData = () => {
+        if (!seriesRef.current) return { open: undefined, high: undefined, low: undefined, close: undefined }
+        const data = param.seriesData.get(seriesRef.current as unknown as ISeriesApi<'Candlestick'>) as
+          | CandlestickData
+          | undefined
+        return {
+          open: data?.open,
+          high: data?.high,
+          low: data?.low,
+          close: data?.close,
+        }
+      }
+
+      const candleData = getCandleData()
+
       setLegend({
+        open: candleData.open,
+        high: candleData.high,
+        low: candleData.low,
+        close: candleData.close,
         ema9: getValue(ema9Ref),
         ema20: getValue(ema20Ref),
         ema50: getValue(ema50Ref),
@@ -1186,6 +1209,9 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
             onClick={() => toggleIndicator('stochastic')}
           >
             Stoch: {formatValue(legend?.stochK)} / {formatValue(legend?.stochD)}
+          </span>
+          <span className="legend-item">
+            O: <span style={{ color: '#16a34a' }}>{formatValue(legend?.open)}</span> H: <span style={{ color: '#16a34a' }}>{formatValue(legend?.high)}</span> L: <span style={{ color: '#16a34a' }}>{formatValue(legend?.low)}</span> C: <span style={{ color: '#16a34a' }}>{formatValue(legend?.close)}</span>
           </span>
         </div>
         </div>
