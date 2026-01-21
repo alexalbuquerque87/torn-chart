@@ -1275,6 +1275,10 @@ function App() {
   const [interval, setInterval] = useState<Interval>('d1')
   const [data, setData] = useState<Candle[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('torn-favorites')
+    return saved ? new Set(JSON.parse(saved)) : new Set()
+  })
 
   // Close settings menu when clicking outside
   useEffect(() => {
@@ -1325,7 +1329,7 @@ function App() {
     }
   }
 
-  const watchlist = useMemo(
+  const allTickers = useMemo(
     () => [
       'ASS',
       'BAG',
@@ -1362,14 +1366,34 @@ function App() {
       'WSU',
       'YAZ',
       'SYM',
-    ].sort(),
+    ],
     []
   )
+
+  const watchlist = useMemo(() => {
+    const favs = allTickers.filter(t => favorites.has(t)).sort()
+    const nonFavs = allTickers.filter(t => !favorites.has(t)).sort()
+    return [...favs, ...nonFavs]
+  }, [allTickers, favorites])
 
   const handleSelectFromList = (symbol: string) => {
     const value = symbol.toLowerCase()
     setTicker(value)
     setInputTicker(value)
+  }
+
+  const toggleFavorite = (symbol: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setFavorites(prev => {
+      const newFavorites = new Set(prev)
+      if (newFavorites.has(symbol)) {
+        newFavorites.delete(symbol)
+      } else {
+        newFavorites.add(symbol)
+      }
+      localStorage.setItem('torn-favorites', JSON.stringify([...newFavorites]))
+      return newFavorites
+    })
   }
 
   const handleNavigate = (direction: 'prev' | 'next') => {
@@ -1545,6 +1569,14 @@ function App() {
         <ul>
           {watchlist.map((symbol) => (
             <li key={symbol}>
+              <button
+                type="button"
+                className="favorite-btn"
+                onClick={(e) => toggleFavorite(symbol, e)}
+                title={favorites.has(symbol) ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                {favorites.has(symbol) ? '★' : '☆'}
+              </button>
               <button
                 type="button"
                 className={
