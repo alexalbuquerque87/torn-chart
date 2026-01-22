@@ -490,6 +490,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     rsi?: number
     stochK?: number
     stochD?: number
+    percentL9?: number
   } | null>(null)
 
   const [visibleEmas, setVisibleEmas] = useState({
@@ -737,13 +738,15 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       }
 
       const candleData = getCandleData()
+      const ema9Value = getValue(ema9Ref)
+      const percentL9 = candleData.low && ema9Value ? (candleData.low / ema9Value) * 100 : undefined
 
       setLegend({
         open: candleData.open,
         high: candleData.high,
         low: candleData.low,
         close: candleData.close,
-        ema9: getValue(ema9Ref),
+        ema9: ema9Value,
         ema20: getValue(ema20Ref),
         ema50: getValue(ema50Ref),
         ema200: getValue(ema200Ref),
@@ -753,6 +756,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
         rsi: getValue(rsiSeriesRef),
         stochK: getValue(stochKRef),
         stochD: getValue(stochDRef),
+        percentL9: percentL9,
       })
     }
 
@@ -1211,7 +1215,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
             Stoch: {formatValue(legend?.stochK)} / {formatValue(legend?.stochD)}
           </span>
           <span className="legend-item">
-            O: <span style={{ color: '#16a34a' }}>{formatValue(legend?.open)}</span> H: <span style={{ color: '#16a34a' }}>{formatValue(legend?.high)}</span> L: <span style={{ color: '#16a34a' }}>{formatValue(legend?.low)}</span> C: <span style={{ color: '#16a34a' }}>{formatValue(legend?.close)}</span>
+            O: <span style={{ color: '#16a34a' }}>{formatValue(legend?.open)}</span> H: <span style={{ color: '#16a34a' }}>{formatValue(legend?.high)}</span> L: <span style={{ color: '#16a34a' }}>{formatValue(legend?.low)}</span> C: <span style={{ color: '#16a34a' }}>{formatValue(legend?.close)}</span> %L9: <span style={{ color: '#16a34a' }}>{formatValue(legend?.percentL9)}</span>
           </span>
         </div>
         </div>
