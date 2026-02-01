@@ -491,6 +491,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     stochK?: number
     stochD?: number
     percentL9?: number
+    percentL50?: number
   } | null>(null)
 
   const [visibleEmas, setVisibleEmas] = useState({
@@ -739,7 +740,9 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
 
       const candleData = getCandleData()
       const ema9Value = getValue(ema9Ref)
+      const ema50Value = getValue(ema50Ref)
       const percentL9 = candleData.low && ema9Value ? (candleData.low / ema9Value) * 100 : undefined
+      const percentL50 = candleData.low && ema50Value ? (candleData.low / ema50Value) * 100 : undefined
 
       setLegend({
         open: candleData.open,
@@ -748,7 +751,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
         close: candleData.close,
         ema9: ema9Value,
         ema20: getValue(ema20Ref),
-        ema50: getValue(ema50Ref),
+        ema50: ema50Value,
         ema200: getValue(ema200Ref),
         bbUpper: getValue(bbUpperRef),
         bbLower: getValue(bbLowerRef),
@@ -757,6 +760,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
         stochK: getValue(stochKRef),
         stochD: getValue(stochDRef),
         percentL9: percentL9,
+        percentL50: percentL50,
       })
     }
 
@@ -1215,7 +1219,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
             Stoch: {formatValue(legend?.stochK)} / {formatValue(legend?.stochD)}
           </span>
           <span className="legend-item">
-            O: <span style={{ color: '#16a34a' }}>{formatValue(legend?.open)}</span> H: <span style={{ color: '#16a34a' }}>{formatValue(legend?.high)}</span> L: <span style={{ color: '#16a34a' }}>{formatValue(legend?.low)}</span> C: <span style={{ color: '#16a34a' }}>{formatValue(legend?.close)}</span> %L9: <span style={{ color: '#16a34a' }}>{formatValue(legend?.percentL9)}</span>
+            O: <span style={{ color: '#16a34a' }}>{formatValue(legend?.open)}</span> H: <span style={{ color: '#16a34a' }}>{formatValue(legend?.high)}</span> L: <span style={{ color: '#16a34a' }}>{formatValue(legend?.low)}</span> C: <span style={{ color: '#16a34a' }}>{formatValue(legend?.close)}</span> %L9: <span style={{ color: '#16a34a' }}>{formatValue(legend?.percentL9)}</span> %L50: <span style={{ color: '#16a34a' }}>{formatValue(legend?.percentL50)}</span>
           </span>
         </div>
         </div>
