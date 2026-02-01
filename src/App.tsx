@@ -270,6 +270,26 @@ function detectLowPattern(candles: Candle[]): Set<number> {
   return patternIndices
 }
 
+function detectL50Pattern(candles: Candle[], ema50Data: LineData<Time>[]): Set<number> {
+  const patternIndices = new Set<number>()
+  
+  if (ema50Data.length === 0) return patternIndices
+  
+  for (let i = 0; i < candles.length; i++) {
+    const candle = candles[i]
+    const ema50Point = ema50Data.find(d => d.time === candle.time)
+    
+    if (ema50Point && ema50Point.value) {
+      const percentL50 = (candle.low / ema50Point.value) * 100
+      if (percentL50 < 98.5) {
+        patternIndices.add(i)
+      }
+    }
+  }
+  
+  return patternIndices
+}
+
 function mapIntervalToApi(interval: Interval): ApiInterval {
   const mapping: Record<Interval, ApiInterval> = {
     '1h': 'h1',
@@ -506,6 +526,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
   const [visibleRsi, setVisibleRsi] = useState(true)
   const [visibleStochastic, setVisibleStochastic] = useState(true)
   const [visibleLowPattern, setVisibleLowPattern] = useState(false)
+  const [visibleL50Pattern, setVisibleL50Pattern] = useState(false)
 
   // Estados para ferramentas de desenho
   const [activeTool, setActiveTool] = useState<DrawingTool>('none')
@@ -992,8 +1013,17 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
 
     // Apply custom pattern colors if indicator is visible
     let candleData = data
-    if (visibleLowPattern) {
-      const patternIndices = detectLowPattern(data)
+    if (visibleLowPattern || visibleL50Pattern) {
+      let patternIndices: Set<number>
+      
+      if (visibleLowPattern) {
+        patternIndices = detectLowPattern(data)
+      } else {
+        // visibleL50Pattern
+        const ema50 = computeEma(data, 50)
+        patternIndices = detectL50Pattern(data, ema50)
+      }
+      
       candleData = data.map((candle, index) => {
         if (patternIndices.has(index)) {
           return {
@@ -1118,7 +1148,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     } else {
       timeScale.fitContent()
     }
-  }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi, visibleStochastic, visibleLowPattern])
+  }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi, visibleStochastic, visibleLowPattern, visibleL50Pattern])
 
   const toggleEma = (ema: keyof typeof visibleEmas) => {
     setVisibleEmas((prev) => ({ ...prev, [ema]: !prev[ema] }))
@@ -1193,10 +1223,27 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
           </span>
           <span
             className={`legend-item ${!visibleLowPattern ? 'disabled' : ''}`}
-            onClick={() => setVisibleLowPattern(!visibleLowPattern)}
+            onClick={() => {
+              if (!visibleLowPattern && visibleL50Pattern) {
+                setVisibleL50Pattern(false)
+              }
+              setVisibleLowPattern(!visibleLowPattern)
+            }}
             style={{ color: '#fbbf24' }}
           >
             123 Pattern
+          </span>
+          <span
+            className={`legend-item ${!visibleL50Pattern ? 'disabled' : ''}`}
+            onClick={() => {
+              if (!visibleL50Pattern && visibleLowPattern) {
+                setVisibleLowPattern(false)
+              }
+              setVisibleL50Pattern(!visibleL50Pattern)
+            }}
+            style={{ color: '#fbbf24' }}
+          >
+            MR Pattern
           </span>
         </div>
         <div>
