@@ -253,6 +253,95 @@ function computeStochastic(candles: Candle[], kPeriod = 12, dPeriod = 3): Stocha
   return { k: kValues, d: dValues }
 }
 
+function computeSuperSmoother(data: number[], period: number): number[] {
+  if (data.length === 0 || period < 2) return []
+
+  const pi = Math.PI
+  const a1 = Math.exp(-Math.sqrt(2) * pi / period)
+  const b1 = 2 * a1 * Math.cos(Math.sqrt(2) * pi / period)
+  const c3 = -(a1 * a1)
+  const c2 = b1
+  const c1 = 1 - c2 - c3
+
+  const result: number[] = []
+  
+  for (let i = 0; i < data.length; i++) {
+    if (i === 0) {
+      result.push(data[i])
+    } else if (i === 1) {
+      result.push(c1 * data[i] + c2 * result[i - 1])
+    } else {
+      result.push(c1 * data[i] + c2 * result[i - 1] + c3 * result[i - 2])
+    }
+  }
+
+  return result
+}
+
+type MeanReversionChannel = {
+  mean: LineData<Time>[]
+  upper1: LineData<Time>[]
+  lower1: LineData<Time>[]
+  upper2: LineData<Time>[]
+  lower2: LineData<Time>[]
+}
+
+function computeMeanReversionChannel(
+  candles: Candle[],
+  period: number = 200,
+  innerMult: number = 1.0,
+  outerMult: number = 2.415
+): MeanReversionChannel {
+  if (candles.length < period) {
+    return { mean: [], upper1: [], lower1: [], upper2: [], lower2: [] }
+  }
+
+  const pi = Math.PI
+  
+  // Calculate True Range for each candle
+  const trueRanges: number[] = []
+  for (let i = 0; i < candles.length; i++) {
+    if (i === 0) {
+      trueRanges.push(candles[i].high - candles[i].low)
+    } else {
+      const tr = Math.max(
+        candles[i].high - candles[i].low,
+        Math.abs(candles[i].high - candles[i - 1].close),
+        Math.abs(candles[i].low - candles[i - 1].close)
+      )
+      trueRanges.push(tr)
+    }
+  }
+
+  // Calculate HLC3 (typical price)
+  const hlc3 = candles.map(c => (c.high + c.low + c.close) / 3)
+
+  // Apply SuperSmoother to HLC3 and True Range
+  const smoothedMean = computeSuperSmoother(hlc3, period)
+  const smoothedRange = computeSuperSmoother(trueRanges, period)
+
+  // Build result arrays
+  const mean: LineData<Time>[] = []
+  const upper1: LineData<Time>[] = []
+  const lower1: LineData<Time>[] = []
+  const upper2: LineData<Time>[] = []
+  const lower2: LineData<Time>[] = []
+
+  for (let i = 0; i < candles.length; i++) {
+    const meanVal = smoothedMean[i]
+    const rangeVal = smoothedRange[i]
+    const time = candles[i].time
+
+    mean.push({ time, value: meanVal })
+    upper1.push({ time, value: meanVal + rangeVal * pi * innerMult })
+    lower1.push({ time, value: meanVal - rangeVal * pi * innerMult })
+    upper2.push({ time, value: meanVal + rangeVal * pi * outerMult })
+    lower2.push({ time, value: meanVal - rangeVal * pi * outerMult })
+  }
+
+  return { mean, upper1, lower1, upper2, lower2 }
+}
+
 function detectLowPattern(candles: Candle[]): Set<number> {
   const patternIndices = new Set<number>()
   
@@ -414,7 +503,7 @@ async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> 
 
   // If no valid cache, fetch from API
   const apiInterval = mapIntervalToApi(interval)
-  const url = `https://tornsy.com/api/${ticker}?interval=${apiInterval}`
+  const url = `https://tornsy.com/api/${ticker}?interval=${apiInterval}&limit=2000`
   const res = await fetch(url)
 
   if (!res.ok) {
@@ -494,6 +583,11 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
   const rsi30Ref = useRef<ISeriesApi<'Line'> | null>(null)
   const stochKRef = useRef<ISeriesApi<'Line'> | null>(null)
   const stochDRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const mrcMeanRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const mrcUpper1Ref = useRef<ISeriesApi<'Line'> | null>(null)
+  const mrcLower1Ref = useRef<ISeriesApi<'Line'> | null>(null)
+  const mrcUpper2Ref = useRef<ISeriesApi<'Line'> | null>(null)
+  const mrcLower2Ref = useRef<ISeriesApi<'Line'> | null>(null)
 
   const [legend, setLegend] = useState<{
     open?: number
@@ -512,6 +606,11 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     stochD?: number
     percentL9?: number
     percentL50?: number
+    mrcMean?: number
+    mrcUpper1?: number
+    mrcLower1?: number
+    mrcUpper2?: number
+    mrcLower2?: number
   } | null>(null)
 
   const [visibleEmas, setVisibleEmas] = useState({
@@ -527,6 +626,7 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
   const [visibleStochastic, setVisibleStochastic] = useState(true)
   const [visibleLowPattern, setVisibleLowPattern] = useState(false)
   const [visibleL50Pattern, setVisibleL50Pattern] = useState(false)
+  const [visibleMRC, setVisibleMRC] = useState(false)
 
   // Estados para ferramentas de desenho
   const [activeTool, setActiveTool] = useState<DrawingTool>('none')
@@ -724,6 +824,36 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     stochKRef.current = stochKSeries
     stochDRef.current = stochDSeries
 
+    // Add Mean Reversion Channel series
+    const mrcMeanOptions: Partial<LineSeriesOptions> = {
+      color: '#FFCD00', // gold
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    }
+    const mrcInnerOptions: Partial<LineSeriesOptions> = {
+      color: '#22c55e', // green
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    }
+    const mrcOuterOptions: Partial<LineSeriesOptions> = {
+      color: '#ef4444', // red
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    }
+    const mrcMeanSeries = chart.addSeries(LineSeries, mrcMeanOptions)
+    const mrcUpper1Series = chart.addSeries(LineSeries, mrcInnerOptions)
+    const mrcLower1Series = chart.addSeries(LineSeries, mrcInnerOptions)
+    const mrcUpper2Series = chart.addSeries(LineSeries, mrcOuterOptions)
+    const mrcLower2Series = chart.addSeries(LineSeries, mrcOuterOptions)
+    mrcMeanRef.current = mrcMeanSeries
+    mrcUpper1Ref.current = mrcUpper1Series
+    mrcLower1Ref.current = mrcLower1Series
+    mrcUpper2Ref.current = mrcUpper2Series
+    mrcLower2Ref.current = mrcLower2Series
+
     const handleCrosshairMove = (param: MouseEventParams<Time>) => {
       if (!param.point || !param.time) {
         setLegend(null)
@@ -782,6 +912,11 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
         stochD: getValue(stochDRef),
         percentL9: percentL9,
         percentL50: percentL50,
+        mrcMean: getValue(mrcMeanRef),
+        mrcUpper1: getValue(mrcUpper1Ref),
+        mrcLower1: getValue(mrcLower1Ref),
+        mrcUpper2: getValue(mrcUpper2Ref),
+        mrcLower2: getValue(mrcLower2Ref),
       })
     }
 
@@ -817,6 +952,11 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       rsi30Ref.current = null
       stochKRef.current = null
       stochDRef.current = null
+      mrcMeanRef.current = null
+      mrcUpper1Ref.current = null
+      mrcLower1Ref.current = null
+      mrcUpper2Ref.current = null
+      mrcLower2Ref.current = null
     }
   }, [options])
 
@@ -1097,6 +1237,24 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       stochDRef.current.setData(stochastic.d)
     }
 
+    // Add Mean Reversion Channel data
+    const mrc = computeMeanReversionChannel(data, 200, 1.0, 2.415)
+    if (mrcMeanRef.current) {
+      mrcMeanRef.current.setData(mrc.mean)
+    }
+    if (mrcUpper1Ref.current) {
+      mrcUpper1Ref.current.setData(mrc.upper1)
+    }
+    if (mrcLower1Ref.current) {
+      mrcLower1Ref.current.setData(mrc.lower1)
+    }
+    if (mrcUpper2Ref.current) {
+      mrcUpper2Ref.current.setData(mrc.upper2)
+    }
+    if (mrcLower2Ref.current) {
+      mrcLower2Ref.current.setData(mrc.lower2)
+    }
+
     // Apply EMA visibility
     if (ema9Ref.current) {
       ema9Ref.current.applyOptions({ visible: visibleEmas.ema9 })
@@ -1143,12 +1301,29 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       stochDRef.current.applyOptions({ visible: visibleStochastic })
     }
 
+    // Apply Mean Reversion Channel visibility
+    if (mrcMeanRef.current) {
+      mrcMeanRef.current.applyOptions({ visible: visibleMRC })
+    }
+    if (mrcUpper1Ref.current) {
+      mrcUpper1Ref.current.applyOptions({ visible: visibleMRC })
+    }
+    if (mrcLower1Ref.current) {
+      mrcLower1Ref.current.applyOptions({ visible: visibleMRC })
+    }
+    if (mrcUpper2Ref.current) {
+      mrcUpper2Ref.current.applyOptions({ visible: visibleMRC })
+    }
+    if (mrcLower2Ref.current) {
+      mrcLower2Ref.current.applyOptions({ visible: visibleMRC })
+    }
+
     if (previousRange != null) {
       timeScale.setVisibleLogicalRange(previousRange)
     } else {
       timeScale.fitContent()
     }
-  }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi, visibleStochastic, visibleLowPattern, visibleL50Pattern])
+  }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi, visibleStochastic, visibleLowPattern, visibleL50Pattern, visibleMRC])
 
   const toggleEma = (ema: keyof typeof visibleEmas) => {
     setVisibleEmas((prev) => ({ ...prev, [ema]: !prev[ema] }))
@@ -1220,6 +1395,13 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
             onClick={() => setVisibleBB(!visibleBB)}
           >
             BB: {formatValue(legend?.bbUpper)} / {formatValue(legend?.bbLower)}
+          </span>
+          <span
+            className={`legend-item ${!visibleMRC ? 'disabled' : ''}`}
+            onClick={() => setVisibleMRC(!visibleMRC)}
+            style={{ color: '#FFCD00' }}
+          >
+            MRC: {formatValue(legend?.mrcMean)} ({formatValue(legend?.mrcUpper2)} / {formatValue(legend?.mrcLower2)})
           </span>
           <span
             className={`legend-item ${!visibleLowPattern ? 'disabled' : ''}`}
