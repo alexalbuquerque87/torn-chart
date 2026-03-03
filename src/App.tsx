@@ -494,7 +494,7 @@ function clearOldCache(): void {
   }
 }
 
-async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> {
+async function fetchOhlc(ticker: string, interval: Interval, limit: number = 1000): Promise<Candle[]> {
   // Try to fetch from cache first
   const cached = getCachedData(ticker, interval)
   if (cached) {
@@ -503,7 +503,7 @@ async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> 
 
   // If no valid cache, fetch from API
   const apiInterval = mapIntervalToApi(interval)
-  const url = `https://tornsy.com/api/${ticker}?interval=${apiInterval}&limit=2000`
+  const url = `https://tornsy.com/api/${ticker}?interval=${apiInterval}&limit=${limit}`
   const res = await fetch(url)
 
   if (!res.ok) {
@@ -535,11 +535,41 @@ async function fetchOhlc(ticker: string, interval: Interval): Promise<Candle[]> 
 }
 
 // Settings button component
-function SettingsButton({ settingsOpen, setSettingsOpen, handleClearCache }: {
+function SettingsButton({ settingsOpen, setSettingsOpen, handleClearCache, candleLimit, setCandleLimit }: {
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
   handleClearCache: () => void
+  candleLimit: number
+  setCandleLimit: (limit: number) => void
 }) {
+  const [inputLimit, setInputLimit] = useState(candleLimit.toString())
+
+  const handleLimitChange = () => {
+    const value = parseInt(inputLimit, 10)
+    if (isNaN(value) || value < 1 || value > 2000) {
+      alert('Limit must be between 1 and 2000')
+      setInputLimit(candleLimit.toString())
+      return
+    }
+    setCandleLimit(value)
+    localStorage.setItem('torn-candle-limit', value.toString())
+    
+    // Clear cache when changing limit
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('ohlc_')) {
+          localStorage.removeItem(key)
+        }
+      }
+    } catch (error) {
+      console.error('Error clearing cache:', error)
+    }
+    
+    setSettingsOpen(false)
+    window.location.reload()
+  }
+
   return (
     <div className="settings-container">
       <button 
@@ -552,6 +582,24 @@ function SettingsButton({ settingsOpen, setSettingsOpen, handleClearCache }: {
       </button>
       {settingsOpen && (
         <div className="settings-menu">
+          <div style={{ padding: '8px', borderBottom: '1px solid #1f2933' }}>
+            <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px' }}>
+              Candles Limit (1-2000):
+            </label>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <input
+                type="number"
+                min="1"
+                max="2000"
+                value={inputLimit}
+                onChange={(e) => setInputLimit(e.target.value)}
+                style={{ flex: 1, padding: '4px', background: '#1f2933', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '4px' }}
+              />
+              <button onClick={handleLimitChange} style={{ padding: '4px 8px' }}>
+                ✓
+              </button>
+            </div>
+          </div>
           <button onClick={handleClearCache}>
             🗑️ Clear Cache
           </button>
@@ -1580,6 +1628,16 @@ function App() {
     const saved = localStorage.getItem('torn-favorites')
     return saved ? new Set(JSON.parse(saved)) : new Set()
   })
+  const [candleLimit, setCandleLimit] = useState<number>(() => {
+    const saved = localStorage.getItem('torn-candle-limit')
+    if (saved) {
+      const value = parseInt(saved, 10)
+      if (!isNaN(value) && value >= 1 && value <= 2000) {
+        return value
+      }
+    }
+    return 1000
+  })
   const savedLogicalRangeRef = useRef<number | null>(null)
 
   // Close settings menu when clicking outside
@@ -1605,7 +1663,7 @@ function App() {
 
     async function load() {
       try {
-        const candles = await fetchOhlc(ticker, interval)
+        const candles = await fetchOhlc(ticker, interval, candleLimit)
         if (!cancelled) {
           setData(candles)
         }
@@ -1621,7 +1679,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [ticker, interval])
+  }, [ticker, interval, candleLimit])
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault()
@@ -1776,6 +1834,8 @@ function App() {
                 settingsOpen={settingsOpen}
                 setSettingsOpen={setSettingsOpen}
                 handleClearCache={handleClearCache}
+                candleLimit={candleLimit}
+                setCandleLimit={setCandleLimit}
               />
             </div>
             <div className="interval-group">
@@ -1851,6 +1911,8 @@ function App() {
               settingsOpen={settingsOpen}
               setSettingsOpen={setSettingsOpen}
               handleClearCache={handleClearCache}
+              candleLimit={candleLimit}
+              setCandleLimit={setCandleLimit}
             />
           </form>
         </header>
