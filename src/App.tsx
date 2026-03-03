@@ -1170,8 +1170,6 @@ function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProp
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return
 
-    const timeScale = chartRef.current.timeScale()
-
     // Apply custom pattern colors if indicator is visible
     let candleData = data
     if (visibleLowPattern || visibleL50Pattern) {
@@ -1275,6 +1273,13 @@ function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProp
     if (mrcLower2Ref.current) {
       mrcLower2Ref.current.setData(mrc.lower2)
     }
+  }, [data, visibleLowPattern, visibleL50Pattern])
+
+  // Separate effect to restore range only when data changes (ticker/interval)
+  useEffect(() => {
+    if (!chartRef.current || !seriesRef.current) return
+    
+    const timeScale = chartRef.current.timeScale()
 
     // Restore logical range if saved, otherwise fit content
     if (savedLogicalRangeRef.current && data.length > 0) {
@@ -1299,7 +1304,7 @@ function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProp
     } else {
       timeScale.fitContent()
     }
-  }, [data, visibleLowPattern, visibleL50Pattern, savedLogicalRangeRef])
+  }, [data, savedLogicalRangeRef])
 
   // Separate effect for indicator visibility (don't reset chart position)
   useEffect(() => {
