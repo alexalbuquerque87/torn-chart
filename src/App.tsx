@@ -565,7 +565,7 @@ type ChartProps = {
   data: Candle[]
   ticker: string
   interval: Interval
-  savedLogicalRangeRef: React.MutableRefObject<{ fromPercent: number; toPercent: number; windowSize: number } | null>
+  savedLogicalRangeRef: React.MutableRefObject<number | null>
 }
 
 function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProps) {
@@ -969,17 +969,9 @@ function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProp
     
     const handleVisibleLogicalRangeChange = () => {
       const logicalRange = timeScale.getVisibleLogicalRange()
-      if (logicalRange && data.length > 0) {
-        const dataLength = data.length
-        const windowSize = logicalRange.to - logicalRange.from
-        const fromPercent = logicalRange.from / dataLength
-        const toPercent = logicalRange.to / dataLength
-        
-        savedLogicalRangeRef.current = {
-          fromPercent,
-          toPercent,
-          windowSize
-        }
+      if (logicalRange) {
+        // Save only the window size (zoom level)
+        savedLogicalRangeRef.current = logicalRange.to - logicalRange.from
       }
     }
 
@@ -988,7 +980,7 @@ function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProp
     return () => {
       timeScale.unsubscribeVisibleLogicalRangeChange(handleVisibleLogicalRangeChange)
     }
-  }, [savedLogicalRangeRef, data.length])
+  }, [savedLogicalRangeRef])
 
   // Separate handler for chart clicks (drawing tools)
   useEffect(() => {
@@ -1350,9 +1342,8 @@ function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProp
     // Restore logical range if saved, otherwise fit content
     if (savedLogicalRangeRef.current && data.length > 0) {
       try {
-        const saved = savedLogicalRangeRef.current
+        const windowSize = savedLogicalRangeRef.current
         const dataLength = data.length
-        const windowSize = saved.windowSize
         
         // Always show the last candles with a small buffer on the right (15 candles of space)
         const buffer = 15
@@ -1564,7 +1555,7 @@ function App() {
     const saved = localStorage.getItem('torn-favorites')
     return saved ? new Set(JSON.parse(saved)) : new Set()
   })
-  const savedLogicalRangeRef = useRef<{ fromPercent: number; toPercent: number; windowSize: number } | null>(null)
+  const savedLogicalRangeRef = useRef<number | null>(null)
 
   // Close settings menu when clicking outside
   useEffect(() => {
