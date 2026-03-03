@@ -1410,6 +1410,14 @@ function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProp
     setActiveTool('none')
   }
 
+  // Calculate current RSI value
+  const currentRsi = useMemo(() => {
+    if (data.length < 15) return null
+    const rsiData = computeRsi(data)
+    if (rsiData.length === 0) return null
+    return rsiData[rsiData.length - 1].value
+  }, [data])
+
   return (
     <div className="chart-inner">
       <div className="legend-and-tools">
@@ -1505,6 +1513,13 @@ function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProp
           {drawingInProgress && (
             <span className="drawing-hint-inline">
               ✏️ Click again to finish
+            </span>
+          )}
+          {currentRsi !== null && (
+            <span className="rsi-indicator" style={{ marginRight: '8px', fontWeight: 'bold' }}>
+              RSI: <span style={{ color: currentRsi > 70 ? '#ef5350' : currentRsi < 30 ? '#26a69a' : '#e5e7eb' }}>
+                {currentRsi.toFixed(2)}
+              </span>
             </span>
           )}
           <button
