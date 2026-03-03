@@ -565,9 +565,10 @@ type ChartProps = {
   data: Candle[]
   ticker: string
   interval: Interval
+  savedLogicalRangeRef: React.MutableRefObject<{ fromPercent: number; toPercent: number; windowSize: number } | null>
 }
 
-function CandleChart({ data, ticker, interval }: ChartProps) {
+function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -960,6 +961,35 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     }
   }, [options])
 
+  // Subscribe to visible range changes to save scroll position
+  useEffect(() => {
+    if (!chartRef.current || !seriesRef.current) return
+
+    const timeScale = chartRef.current.timeScale()
+    
+    const handleVisibleLogicalRangeChange = () => {
+      const logicalRange = timeScale.getVisibleLogicalRange()
+      if (logicalRange && data.length > 0) {
+        const dataLength = data.length
+        const windowSize = logicalRange.to - logicalRange.from
+        const fromPercent = logicalRange.from / dataLength
+        const toPercent = logicalRange.to / dataLength
+        
+        savedLogicalRangeRef.current = {
+          fromPercent,
+          toPercent,
+          windowSize
+        }
+      }
+    }
+
+    timeScale.subscribeVisibleLogicalRangeChange(handleVisibleLogicalRangeChange)
+
+    return () => {
+      timeScale.unsubscribeVisibleLogicalRangeChange(handleVisibleLogicalRangeChange)
+    }
+  }, [savedLogicalRangeRef, data.length])
+
   // Separate handler for chart clicks (drawing tools)
   useEffect(() => {
     if (!chartRef.current || !seriesRef.current) return
@@ -1149,7 +1179,6 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
     if (!seriesRef.current || !chartRef.current) return
 
     const timeScale = chartRef.current.timeScale()
-    const previousRange = timeScale.getVisibleLogicalRange()
 
     // Apply custom pattern colors if indicator is visible
     let candleData = data
@@ -1318,12 +1347,31 @@ function CandleChart({ data, ticker, interval }: ChartProps) {
       mrcLower2Ref.current.applyOptions({ visible: visibleMRC })
     }
 
-    if (previousRange != null) {
-      timeScale.setVisibleLogicalRange(previousRange)
+    // Restore logical range if saved, otherwise fit content
+    if (savedLogicalRangeRef.current && data.length > 0) {
+      try {
+        const saved = savedLogicalRangeRef.current
+        const dataLength = data.length
+        const windowSize = saved.windowSize
+        
+        // Always show the last candles with a small buffer on the right (15 candles of space)
+        const buffer = 15
+        const to = dataLength - 1 + buffer
+        const from = Math.max(0, to - windowSize)
+        
+        timeScale.setVisibleLogicalRange({ from, to })
+        
+        // Force price scale to auto-fit the new data
+        const priceScale = chartRef.current.priceScale('right')
+        priceScale.applyOptions({ autoScale: true })
+      } catch (e) {
+        // If the logical range is invalid, fit content
+        timeScale.fitContent()
+      }
     } else {
       timeScale.fitContent()
     }
-  }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi, visibleStochastic, visibleLowPattern, visibleL50Pattern, visibleMRC])
+  }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi, visibleStochastic, visibleLowPattern, visibleL50Pattern, visibleMRC, savedLogicalRangeRef])
 
   const toggleEma = (ema: keyof typeof visibleEmas) => {
     setVisibleEmas((prev) => ({ ...prev, [ema]: !prev[ema] }))
@@ -1516,6 +1564,7 @@ function App() {
     const saved = localStorage.getItem('torn-favorites')
     return saved ? new Set(JSON.parse(saved)) : new Set()
   })
+  const savedLogicalRangeRef = useRef<{ fromPercent: number; toPercent: number; windowSize: number } | null>(null)
 
   // Close settings menu when clicking outside
   useEffect(() => {
@@ -1793,7 +1842,7 @@ function App() {
         <main className="app-main">
           {data.length > 0 && (
             <div className="chart-container">
-              <CandleChart data={data} ticker={ticker} interval={interval} />
+              <CandleChart data={data} ticker={ticker} interval={interval} savedLogicalRangeRef={savedLogicalRangeRef} />
             </div>
           )}
         </main>
