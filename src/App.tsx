@@ -1276,6 +1276,35 @@ function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProp
       mrcLower2Ref.current.setData(mrc.lower2)
     }
 
+    // Restore logical range if saved, otherwise fit content
+    if (savedLogicalRangeRef.current && data.length > 0) {
+      try {
+        const windowSize = savedLogicalRangeRef.current
+        const dataLength = data.length
+        
+        // Always show the last candles with a small buffer on the right (15 candles of space)
+        const buffer = 15
+        const to = dataLength - 1 + buffer
+        const from = Math.max(0, to - windowSize)
+        
+        timeScale.setVisibleLogicalRange({ from, to })
+        
+        // Force price scale to auto-fit the new data
+        const priceScale = chartRef.current.priceScale('right')
+        priceScale.applyOptions({ autoScale: true })
+      } catch (e) {
+        // If the logical range is invalid, fit content
+        timeScale.fitContent()
+      }
+    } else {
+      timeScale.fitContent()
+    }
+  }, [data, visibleLowPattern, visibleL50Pattern, savedLogicalRangeRef])
+
+  // Separate effect for indicator visibility (don't reset chart position)
+  useEffect(() => {
+    if (!chartRef.current) return
+
     // Apply EMA visibility
     if (ema9Ref.current) {
       ema9Ref.current.applyOptions({ visible: visibleEmas.ema9 })
@@ -1338,31 +1367,7 @@ function CandleChart({ data, ticker, interval, savedLogicalRangeRef }: ChartProp
     if (mrcLower2Ref.current) {
       mrcLower2Ref.current.applyOptions({ visible: visibleMRC })
     }
-
-    // Restore logical range if saved, otherwise fit content
-    if (savedLogicalRangeRef.current && data.length > 0) {
-      try {
-        const windowSize = savedLogicalRangeRef.current
-        const dataLength = data.length
-        
-        // Always show the last candles with a small buffer on the right (15 candles of space)
-        const buffer = 15
-        const to = dataLength - 1 + buffer
-        const from = Math.max(0, to - windowSize)
-        
-        timeScale.setVisibleLogicalRange({ from, to })
-        
-        // Force price scale to auto-fit the new data
-        const priceScale = chartRef.current.priceScale('right')
-        priceScale.applyOptions({ autoScale: true })
-      } catch (e) {
-        // If the logical range is invalid, fit content
-        timeScale.fitContent()
-      }
-    } else {
-      timeScale.fitContent()
-    }
-  }, [data, visibleEmas, visibleBB, visibleVolume, visibleRsi, visibleStochastic, visibleLowPattern, visibleL50Pattern, visibleMRC, savedLogicalRangeRef])
+  }, [visibleEmas, visibleBB, visibleVolume, visibleRsi, visibleStochastic, visibleMRC])
 
   const toggleEma = (ema: keyof typeof visibleEmas) => {
     setVisibleEmas((prev) => ({ ...prev, [ema]: !prev[ema] }))
